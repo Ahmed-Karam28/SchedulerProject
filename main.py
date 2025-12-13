@@ -1,5 +1,881 @@
-def main():
-    print("Hello from your Python script!")
+"""
+CPU Scheduling Simulator
+========================
+
+This module implements a GUI application (Tkinter) that simulates
+classic CPU scheduling algorithms commonly studied in an operating
+systems course:
+
+- First-Come, First-Served (FCFS)
+- Shortest Job First (SJF, non-preemptive)
+- Round Robin (with configurable time quantum)
+- Priority Scheduling (non-preemptive, lower number = higher priority)
+
+The GUI allows you to:
+
+- Add processes dynamically (arrival time, burst time, priority)
+- Select a scheduling algorithm and (for RR) the time quantum
+- Visualize the resulting schedule as a Gantt chart
+- Inspect per-process metrics: completion, turnaround, and waiting times,
+  plus the average waiting time across all processes.
+
+The code is intentionally written in a clear, modular, and well-documented
+style so that it can be used as part of an OS course report.
+"""
+
+import tkinter as tk
+from tkinter import ttk, messagebox
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
+
+
+# ---------------------------------------------------------------------------
+# Data model
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class Process:
+    """
+    Represents a single process for CPU scheduling.
+
+    Attributes:
+        pid:        A human-readable process identifier (e.g. "P1").
+        arrival_time: The time at which the process arrives in the ready queue.
+        burst_time:   The total CPU time required by the process.
+        priority:     Process priority (lower number = higher priority).
+    """
+
+    pid: str
+    arrival_time: int
+    burst_time: int
+    priority: int = 0
+
+
+# Type alias used by the scheduling functions.
+# Each schedule entry represents one contiguous CPU execution interval.
+ScheduleEntry = Dict[str, Any]  # keys: "pid", "start", "end"
+
+
+# ---------------------------------------------------------------------------
+# Scheduling algorithms
+# ---------------------------------------------------------------------------
+
+
+def fcfs_scheduling(processes: List[Process]) -> Tuple[List[ScheduleEntry], List[Dict[str, Any]]]:
+    """
+    First-Come, First-Served (FCFS) scheduling.
+
+    Concept:
+        - Non-preemptive.
+        - Processes are ordered by arrival time.
+        - The CPU is assigned to the process that arrives first.
+        - If the CPU becomes idle (no ready process), time jumps forward
+          to the arrival of the next process.
+
+    Args:
+        processes: List of Process objects to schedule.
+
+    Returns:
+        schedule: List of schedule entries describing the Gantt chart.
+        stats:    List of per-process metrics dictionaries with keys:
+                  pid, arrival_time, burst_time, priority,
+                  completion_time, turnaround_time, waiting_time.
+    """
+    if not processes:
+        return [], []
+
+    # Sort by arrival time (and PID for a deterministic tie-break).
+    procs = sorted(processes, key=lambda p: (p.arrival_time, p.pid))
+
+    current_time = 0
+    schedule: List[ScheduleEntry] = []
+    completion_times: Dict[str, int] = {}
+
+    for p in procs:
+        # If no process is ready yet, the CPU is idle until this one arrives.
+        if current_time < p.arrival_time:
+            schedule.append({"pid": None, "start": current_time, "end": p.arrival_time})
+            current_time = p.arrival_time
+
+        # Run the process to completion.
+        start = current_time
+        end = current_time + p.burst_time
+        schedule.append({"pid": p.pid, "start": start, "end": end})
+        completion_times[p.pid] = end
+        current_time = end
+
+    stats: List[Dict[str, Any]] = []
+    for p in procs:
+        ct = completion_times[p.pid]
+        tat = ct - p.arrival_time
+        wt = tat - p.burst_time
+        stats.append(
+            {
+                "pid": p.pid,
+                "arrival_time": p.arrival_time,
+                "burst_time": p.burst_time,
+                "priority": p.priority,
+                "completion_time": ct,
+                "turnaround_time": tat,
+                "waiting_time": wt,
+            }
+        )
+
+    return schedule, stats
+
+
+def sjf_scheduling(processes: List[Process]) -> Tuple[List[ScheduleEntry], List[Dict[str, Any]]]:
+    """
+    Shortest Job First (SJF) scheduling, non-preemptive.
+
+    Concept:
+        - Non-preemptive.
+        - Among the processes that have arrived and are waiting, always
+          choose the one with the smallest CPU burst time.
+        - If no process is ready, the CPU is idle until the next arrival.
+
+    Args:
+        processes: List of Process objects to schedule.
+
+    Returns:
+        schedule: Gantt chart schedule entries.
+        stats:    Per-process metrics (see fcfs_scheduling docstring).
+    """
+    if not processes:
+        return [], []
+
+    # Sort by arrival time for easier management of "who arrives next".
+    procs = sorted(processes, key=lambda p: (p.arrival_time, p.pid))
+    n = len(procs)
+    completed = 0
+    current_time = 0
+
+    schedule: List[ScheduleEntry] = []
+    completion_times: Dict[str, int] = {}
+
+    ready_queue: List[Process] = []
+    next_index = 0  # Index into procs for the next process that has not yet arrived
+
+    while completed < n:
+        # Move all processes that have arrived by current_time into the ready queue.
+        while next_index < n and procs[next_index].arrival_time <= current_time:
+            ready_queue.append(procs[next_index])
+            next_index += 1
+
+        if not ready_queue:
+            # No process is ready -> CPU idle until the next process arrives.
+            next_arrival = procs[next_index].arrival_time
+            if current_time < next_arrival:
+                schedule.append({"pid": None, "start": current_time, "end": next_arrival})
+            current_time = next_arrival
+            continue
+
+        # Select the process with the smallest burst time (SJF rule).
+        ready_queue.sort(key=lambda p: (p.burst_time, p.arrival_time, p.pid))
+        current = ready_queue.pop(0)
+
+        start = current_time
+        end = current_time + current.burst_time
+        schedule.append({"pid": current.pid, "start": start, "end": end})
+        completion_times[current.pid] = end
+        current_time = end
+        completed += 1
+
+    # Compute metrics.
+    stats: List[Dict[str, Any]] = []
+    # Iterate in PID order for a stable table display.
+    for p in sorted(procs, key=lambda p: p.pid):
+        ct = completion_times[p.pid]
+        tat = ct - p.arrival_time
+        wt = tat - p.burst_time
+        stats.append(
+            {
+                "pid": p.pid,
+                "arrival_time": p.arrival_time,
+                "burst_time": p.burst_time,
+                "priority": p.priority,
+                "completion_time": ct,
+                "turnaround_time": tat,
+                "waiting_time": wt,
+            }
+        )
+
+    return schedule, stats
+
+
+def priority_scheduling(processes: List[Process]) -> Tuple[List[ScheduleEntry], List[Dict[str, Any]]]:
+    """
+    Priority scheduling, non-preemptive.
+
+    Convention:
+        - Lower numeric priority value means *higher* priority.
+          (Priority 1 is higher than 2.)
+
+    Concept:
+        - Non-preemptive.
+        - Among the ready processes, always choose the one with the
+          highest priority (smallest numeric priority).
+        - If no process is ready, the CPU is idle until the next arrival.
+
+    Args:
+        processes: List of Process objects to schedule.
+
+    Returns:
+        schedule: Gantt chart schedule entries.
+        stats:    Per-process metrics (see fcfs_scheduling docstring).
+    """
+    if not processes:
+        return [], []
+
+    procs = sorted(processes, key=lambda p: (p.arrival_time, p.pid))
+    n = len(procs)
+    completed = 0
+    current_time = 0
+
+    schedule: List[ScheduleEntry] = []
+    completion_times: Dict[str, int] = {}
+
+    ready_queue: List[Process] = []
+    next_index = 0
+
+    while completed < n:
+        # Add newly arrived processes to the ready queue.
+        while next_index < n and procs[next_index].arrival_time <= current_time:
+            ready_queue.append(procs[next_index])
+            next_index += 1
+
+        if not ready_queue:
+            # CPU is idle.
+            next_arrival = procs[next_index].arrival_time
+            if current_time < next_arrival:
+                schedule.append({"pid": None, "start": current_time, "end": next_arrival})
+            current_time = next_arrival
+            continue
+
+        # Pick the ready process with the highest priority
+        # (lowest numeric priority value).
+        ready_queue.sort(key=lambda p: (p.priority, p.arrival_time, p.pid))
+        current = ready_queue.pop(0)
+
+        start = current_time
+        end = current_time + current.burst_time
+        schedule.append({"pid": current.pid, "start": start, "end": end})
+        completion_times[current.pid] = end
+        current_time = end
+        completed += 1
+
+    stats: List[Dict[str, Any]] = []
+    for p in sorted(procs, key=lambda p: p.pid):
+        ct = completion_times[p.pid]
+        tat = ct - p.arrival_time
+        wt = tat - p.burst_time
+        stats.append(
+            {
+                "pid": p.pid,
+                "arrival_time": p.arrival_time,
+                "burst_time": p.burst_time,
+                "priority": p.priority,
+                "completion_time": ct,
+                "turnaround_time": tat,
+                "waiting_time": wt,
+            }
+        )
+
+    return schedule, stats
+
+
+def round_robin_scheduling(
+    processes: List[Process], quantum: int
+) -> Tuple[List[ScheduleEntry], List[Dict[str, Any]]]:
+    """
+    Round Robin (RR) scheduling with a given time quantum.
+
+    Concept:
+        - Preemptive.
+        - Each process gets a time slice of length 'quantum'.
+        - After using its slice (or if it finishes earlier), the process is
+          moved to the end of the ready queue (if it is not finished).
+        - New processes that arrive while the CPU is running are added
+          to the ready queue as soon as they arrive.
+        - When the ready queue is empty, the CPU is idle until the next
+          process arrives.
+
+    Args:
+        processes: List of Process objects to schedule.
+        quantum:   The time quantum (must be a positive integer).
+
+    Returns:
+        schedule: Gantt chart schedule entries.
+        stats:    Per-process metrics (see fcfs_scheduling docstring).
+    """
+    if not processes:
+        return [], []
+    if quantum <= 0:
+        raise ValueError("Time quantum must be a positive integer.")
+
+    procs = sorted(processes, key=lambda p: (p.arrival_time, p.pid))
+    n = len(procs)
+
+    # Remaining burst time per process.
+    remaining: Dict[str, int] = {p.pid: p.burst_time for p in procs}
+    completion_times: Dict[str, int] = {}
+
+    schedule: List[ScheduleEntry] = []
+    ready_queue: List[Process] = []
+
+    current_time = 0
+    next_index = 0  # Next process that has not yet been inserted into the ready queue.
+
+    while len(completion_times) < n:
+        # If there are no ready processes, advance time to the next arrival.
+        if not ready_queue and next_index < n and current_time < procs[next_index].arrival_time:
+            next_arrival = procs[next_index].arrival_time
+            schedule.append({"pid": None, "start": current_time, "end": next_arrival})
+            current_time = next_arrival
+
+        # Add all processes that have arrived by current_time to the ready queue.
+        while next_index < n and procs[next_index].arrival_time <= current_time:
+            ready_queue.append(procs[next_index])
+            next_index += 1
+
+        if not ready_queue:
+            # No process is ready and we have already advanced to next arrival.
+            # Loop will continue and add newly arrived processes above.
+            continue
+
+        current = ready_queue.pop(0)
+
+        # Determine how long this process will run in this slice.
+        run_time = min(quantum, remaining[current.pid])
+        start = current_time
+        end = current_time + run_time
+        schedule.append({"pid": current.pid, "start": start, "end": end})
+
+        # Update time and remaining burst.
+        current_time = end
+        remaining[current.pid] -= run_time
+
+        # Add any processes that arrived during this time slice.
+        while next_index < n and procs[next_index].arrival_time <= current_time:
+            ready_queue.append(procs[next_index])
+            next_index += 1
+
+        if remaining[current.pid] > 0:
+            # Not finished: put it back at the end of the queue.
+            ready_queue.append(current)
+        else:
+            # Finished: record completion time.
+            completion_times[current.pid] = current_time
+
+    stats: List[Dict[str, Any]] = []
+    for p in sorted(procs, key=lambda p: p.pid):
+        ct = completion_times[p.pid]
+        tat = ct - p.arrival_time
+        wt = tat - p.burst_time
+        stats.append(
+            {
+                "pid": p.pid,
+                "arrival_time": p.arrival_time,
+                "burst_time": p.burst_time,
+                "priority": p.priority,
+                "completion_time": ct,
+                "turnaround_time": tat,
+                "waiting_time": wt,
+            }
+        )
+
+    return schedule, stats
+
+
+# ---------------------------------------------------------------------------
+# GUI Application
+# ---------------------------------------------------------------------------
+
+
+class CPUSchedulerApp:
+    """
+    Tkinter-based GUI for exploring CPU scheduling algorithms.
+
+    High-level structure:
+        - Top section: process input (arrival, burst, priority) + list of processes.
+        - Middle section: algorithm selection + (for RR) quantum selection.
+        - Bottom section: Gantt chart (Canvas) + metrics table (Treeview).
+    """
+
+    def __init__(self, root: Optional[tk.Tk] = None) -> None:
+        if root is None:
+            root = tk.Tk()
+        self.root = root
+        self.root.title("CPU Scheduling Simulator")
+
+        # Counter used to assign new process identifiers (P1, P2, ...).
+        self._next_pid = 1
+
+        self._build_ui()
+
+    # ------------------------------------------------------------------#
+    # UI construction                                                   #
+    # ------------------------------------------------------------------#
+
+    def _build_ui(self) -> None:
+        """Create and lay out all Tkinter widgets."""
+        main_frame = ttk.Frame(self.root, padding=10)
+        main_frame.pack(fill="both", expand=True)
+
+        # Process input section.
+        self._build_process_input_section(main_frame)
+
+        # Algorithm selection section.
+        self._build_algorithm_section(main_frame)
+
+        # Output section (Gantt chart + metrics).
+        self._build_output_section(main_frame)
+
+    def _build_process_input_section(self, parent: ttk.Frame) -> None:
+        frame = ttk.LabelFrame(parent, text="Process Input")
+        frame.pack(fill="x", expand=False, pady=(0, 10))
+
+        # Input row: arrival time, burst time, priority, and buttons.
+        ttk.Label(frame, text="Arrival Time").grid(row=0, column=0, padx=5, pady=3, sticky="w")
+        self.arrival_entry = ttk.Entry(frame, width=10)
+        self.arrival_entry.grid(row=0, column=1, padx=5, pady=3)
+
+        ttk.Label(frame, text="Burst Time").grid(row=0, column=2, padx=5, pady=3, sticky="w")
+        self.burst_entry = ttk.Entry(frame, width=10)
+        self.burst_entry.grid(row=0, column=3, padx=5, pady=3)
+
+        ttk.Label(frame, text="Priority\n(lower = higher)").grid(row=0, column=4, padx=5, pady=3, sticky="w")
+        self.priority_entry = ttk.Entry(frame, width=10)
+        self.priority_entry.grid(row=0, column=5, padx=5, pady=3)
+
+        add_button = ttk.Button(frame, text="Add Process", command=self.add_process)
+        add_button.grid(row=0, column=6, padx=5, pady=3)
+
+        remove_button = ttk.Button(frame, text="Remove Selected", command=self.remove_selected_process)
+        remove_button.grid(row=0, column=7, padx=5, pady=3)
+
+        # Treeview to display the current list of processes.
+        columns = ("pid", "arrival", "burst", "priority")
+        self.process_tree = ttk.Treeview(frame, columns=columns, show="headings", height=6)
+        self.process_tree.heading("pid", text="PID")
+        self.process_tree.heading("arrival", text="Arrival")
+        self.process_tree.heading("burst", text="Burst")
+        self.process_tree.heading("priority", text="Priority")
+
+        for col in columns:
+            self.process_tree.column(col, anchor="center", width=80, stretch=False)
+
+        self.process_tree.grid(row=1, column=0, columnspan=8, sticky="nsew", pady=(5, 0))
+
+        # Scrollbar for the Treeview.
+        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self.process_tree.yview)
+        self.process_tree.configure(yscroll=scrollbar.set)
+        scrollbar.grid(row=1, column=8, sticky="ns", pady=(5, 0))
+
+        # Allow the tree to expand horizontally.
+        frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=1)
+        frame.columnconfigure(2, weight=1)
+        frame.columnconfigure(3, weight=1)
+        frame.columnconfigure(4, weight=1)
+        frame.columnconfigure(5, weight=1)
+        frame.columnconfigure(6, weight=0)
+        frame.columnconfigure(7, weight=0)
+
+    def _build_algorithm_section(self, parent: ttk.Frame) -> None:
+        frame = ttk.LabelFrame(parent, text="Scheduling Algorithm")
+        frame.pack(fill="x", expand=False, pady=(0, 10))
+
+        self.algorithm_var = tk.StringVar(value="FCFS")
+
+        ttk.Radiobutton(
+            frame,
+            text="First-Come, First-Served (FCFS)",
+            value="FCFS",
+            variable=self.algorithm_var,
+        ).grid(row=0, column=0, padx=5, pady=3, sticky="w")
+
+        ttk.Radiobutton(
+            frame,
+            text="Shortest Job First (SJF, non-preemptive)",
+            value="SJF",
+            variable=self.algorithm_var,
+        ).grid(row=1, column=0, padx=5, pady=3, sticky="w")
+
+        ttk.Radiobutton(
+            frame,
+            text="Priority Scheduling (non-preemptive)",
+            value="PRIORITY",
+            variable=self.algorithm_var,
+        ).grid(row=2, column=0, padx=5, pady=3, sticky="w")
+
+        ttk.Radiobutton(
+            frame,
+            text="Round Robin (RR)",
+            value="RR",
+            variable=self.algorithm_var,
+        ).grid(row=3, column=0, padx=5, pady=3, sticky="w")
+
+        # Time quantum controls (used only for RR, but always visible for simplicity).
+        ttk.Label(frame, text="Time Quantum:").grid(row=3, column=1, padx=5, pady=3, sticky="e")
+        self.quantum_entry = ttk.Entry(frame, width=8)
+        self.quantum_entry.insert(0, "2")  # sensible default
+        self.quantum_entry.grid(row=3, column=2, padx=5, pady=3, sticky="w")
+
+        # Simulation control buttons.
+        run_button = ttk.Button(frame, text="Run Simulation", command=self.run_simulation)
+        run_button.grid(row=0, column=3, padx=10, pady=3, rowspan=2, sticky="ew")
+
+        clear_button = ttk.Button(frame, text="Clear All", command=self.clear_all)
+        clear_button.grid(row=2, column=3, padx=10, pady=3, rowspan=2, sticky="ew")
+
+        frame.columnconfigure(0, weight=1)
+        frame.columnconfigure(1, weight=0)
+        frame.columnconfigure(2, weight=0)
+        frame.columnconfigure(3, weight=0)
+
+    def _build_output_section(self, parent: ttk.Frame) -> None:
+        frame = ttk.Frame(parent)
+        frame.pack(fill="both", expand=True)
+
+        # Gantt chart.
+        gantt_frame = ttk.LabelFrame(frame, text="Gantt Chart")
+        gantt_frame.pack(fill="x", expand=False)
+
+        self.gantt_canvas = tk.Canvas(gantt_frame, height=180, bg="white")
+        self.gantt_canvas.pack(fill="x", expand=True, padx=5, pady=5)
+
+        # Process metrics table.
+        metrics_frame = ttk.LabelFrame(frame, text="Process Metrics")
+        metrics_frame.pack(fill="both", expand=True, pady=(10, 0))
+
+        result_columns = (
+            "pid",
+            "arrival",
+            "burst",
+            "priority",
+            "completion",
+            "turnaround",
+            "waiting",
+        )
+        self.results_tree = ttk.Treeview(metrics_frame, columns=result_columns, show="headings", height=8)
+
+        headings = [
+            ("pid", "PID"),
+            ("arrival", "Arrival"),
+            ("burst", "Burst"),
+            ("priority", "Priority"),
+            ("completion", "Completion"),
+            ("turnaround", "Turnaround"),
+            ("waiting", "Waiting"),
+        ]
+        for col, label in headings:
+            self.results_tree.heading(col, text=label)
+            self.results_tree.column(col, anchor="center", width=90, stretch=False)
+
+        self.results_tree.pack(side="left", fill="both", expand=True, padx=(5, 0), pady=5)
+
+        metrics_scrollbar = ttk.Scrollbar(metrics_frame, orient="vertical", command=self.results_tree.yview)
+        self.results_tree.configure(yscroll=metrics_scrollbar.set)
+        metrics_scrollbar.pack(side="right", fill="y", pady=5, padx=(0, 5))
+
+        self.avg_waiting_label = ttk.Label(metrics_frame, text="Average Waiting Time: N/A")
+        self.avg_waiting_label.pack(anchor="w", padx=5, pady=(0, 5))
+
+    # ------------------------------------------------------------------#
+    # Process list operations                                           #
+    # ------------------------------------------------------------------#
+
+    def add_process(self) -> None:
+        """
+        Add a new process using the values from the entry fields.
+
+        Arrival time and burst time must be integers; burst time must be > 0,
+        and arrival time must be >= 0. Priority is optional (defaults to 0
+        if left blank).
+        """
+        arrival_text = self.arrival_entry.get().strip()
+        burst_text = self.burst_entry.get().strip()
+        priority_text = self.priority_entry.get().strip()
+
+        try:
+            arrival = int(arrival_text)
+            burst = int(burst_text)
+        except ValueError:
+            messagebox.showerror("Invalid input", "Arrival and burst times must be integers.")
+            return
+
+        if arrival < 0 or burst <= 0:
+            messagebox.showerror(
+                "Invalid input",
+                "Arrival time must be >= 0 and burst time must be > 0.",
+            )
+            return
+
+        if priority_text:
+            try:
+                priority = int(priority_text)
+            except ValueError:
+                messagebox.showerror("Invalid input", "Priority must be an integer if specified.")
+                return
+        else:
+            priority = 0
+
+        pid = f"P{self._next_pid}"
+        self._next_pid += 1
+
+        self.process_tree.insert("", "end", values=(pid, arrival, burst, priority))
+
+        # Clear input fields to make adding the next process easier.
+        self.arrival_entry.delete(0, tk.END)
+        self.burst_entry.delete(0, tk.END)
+        self.priority_entry.delete(0, tk.END)
+
+    def remove_selected_process(self) -> None:
+        """Remove the selected process(es) from the process list."""
+        selection = self.process_tree.selection()
+        for item in selection:
+            self.process_tree.delete(item)
+
+    def clear_all(self) -> None:
+        """Clear all processes, results, and the Gantt chart."""
+        for item in self.process_tree.get_children():
+            self.process_tree.delete(item)
+
+        for item in self.results_tree.get_children():
+            self.results_tree.delete(item)
+
+        self.gantt_canvas.delete("all")
+        self.avg_waiting_label.config(text="Average Waiting Time: N/A")
+
+        # Reset PID counter so new processes start again at P1.
+        self._next_pid = 1
+
+    # ------------------------------------------------------------------#
+    # Simulation + visualization                                       #
+    # ------------------------------------------------------------------#
+
+    def _get_processes_from_tree(self) -> List[Process]:
+        """
+        Convert the rows in the process Treeview into Process objects.
+
+        This is the canonical source of truth for the simulator, so that
+        any manual edits or row deletions are reflected correctly.
+        """
+        processes: List[Process] = []
+        for item in self.process_tree.get_children():
+            pid, arrival, burst, priority = self.process_tree.item(item, "values")
+            processes.append(
+                Process(
+                    pid=str(pid),
+                    arrival_time=int(arrival),
+                    burst_time=int(burst),
+                    priority=int(priority),
+                )
+            )
+        return processes
+
+    def run_simulation(self) -> None:
+        """Run the selected scheduling algorithm and update the GUI."""
+        processes = self._get_processes_from_tree()
+        if not processes:
+            messagebox.showerror("No processes", "Please add at least one process before running the simulation.")
+            return
+
+        algorithm = self.algorithm_var.get()
+        try:
+            if algorithm == "FCFS":
+                schedule, stats = fcfs_scheduling(processes)
+            elif algorithm == "SJF":
+                schedule, stats = sjf_scheduling(processes)
+            elif algorithm == "PRIORITY":
+                schedule, stats = priority_scheduling(processes)
+            elif algorithm == "RR":
+                quantum_text = self.quantum_entry.get().strip()
+                if not quantum_text:
+                    messagebox.showerror("Invalid quantum", "Please enter a time quantum for Round Robin.")
+                    return
+
+                try:
+                    quantum = int(quantum_text)
+                except ValueError:
+                    messagebox.showerror("Invalid quantum", "Time quantum must be a positive integer.")
+                    return
+
+                schedule, stats = round_robin_scheduling(processes, quantum)
+            else:
+                messagebox.showerror("Unknown algorithm", f"Unsupported algorithm: {algorithm}")
+                return
+        except ValueError as exc:
+            # For example, invalid quantum passed into round_robin_scheduling.
+            messagebox.showerror("Error", str(exc))
+            return
+
+        # Compute average waiting time.
+        if stats:
+            total_waiting = sum(p["waiting_time"] for p in stats)
+            avg_waiting = total_waiting / len(stats)
+        else:
+            avg_waiting = 0.0
+
+        # Update the GUI with the new schedule and metrics.
+        self._populate_results_table(stats, avg_waiting)
+        self._draw_gantt_chart(schedule)
+
+    def _populate_results_table(self, stats: List[Dict[str, Any]], avg_waiting: float) -> None:
+        """Display per-process metrics and the overall average waiting time."""
+        # Clear existing rows.
+        for item in self.results_tree.get_children():
+            self.results_tree.delete(item)
+
+        # Insert new metrics rows.
+        for row in stats:
+            self.results_tree.insert(
+                "",
+                "end",
+                values=(
+                    row["pid"],
+                    row["arrival_time"],
+                    row["burst_time"],
+                    row["priority"],
+                    row["completion_time"],
+                    row["turnaround_time"],
+                    row["waiting_time"],
+                ),
+            )
+
+        self.avg_waiting_label.config(text=f"Average Waiting Time: {avg_waiting:.2f}")
+
+    def _draw_gantt_chart(self, schedule: List[ScheduleEntry]) -> None:
+        """
+        Draw the Gantt chart on the Canvas.
+
+        Each schedule entry is drawn as a rectangle whose width is
+        proportional to its duration. Different processes are shown in
+        different colors; idle time (no process running) is shown in gray.
+        """
+        self.gantt_canvas.delete("all")
+
+        if not schedule:
+            self.gantt_canvas.create_text(
+                10,
+                10,
+                anchor="nw",
+                text="No schedule to display.",
+                fill="black",
+            )
+            return
+
+        # Determine total time span to scale the chart horizontally.
+        total_time = max(entry["end"] for entry in schedule)
+        if total_time <= 0:
+            return
+
+        canvas_width = int(self.gantt_canvas.winfo_width())
+        if canvas_width <= 1:
+            # If the canvas has not been fully laid out yet, fall back to a default width.
+            canvas_width = 800
+
+        canvas_height = int(self.gantt_canvas.winfo_height())
+        if canvas_height <= 1:
+            canvas_height = 180
+
+        left_margin = 20
+        right_margin = 20
+        top_margin = 30
+        bar_height = 50
+
+        usable_width = max(1, canvas_width - left_margin - right_margin)
+        time_scale = usable_width / float(total_time)
+
+        bar_top = top_margin
+        bar_bottom = bar_top + bar_height
+
+        # Color palette for processes.
+        color_palette = [
+            "#FF9999",
+            "#99FF99",
+            "#9999FF",
+            "#FFCC99",
+            "#CC99FF",
+            "#99FFFF",
+            "#FF99CC",
+            "#CCCC99",
+            "#FFDEAD",
+            "#AFEEEE",
+        ]
+        pid_to_color: Dict[str, str] = {}
+        next_color_index = 0
+
+        # Draw each scheduled segment.
+        for entry in schedule:
+            start = entry["start"]
+            end = entry["end"]
+            if end <= start:
+                continue  # zero-length segment, nothing to draw
+
+            x1 = left_margin + start * time_scale
+            x2 = left_margin + end * time_scale
+
+            pid = entry["pid"]
+            if pid is None:
+                # Idle time.
+                fill_color = "#DDDDDD"
+                label = "Idle"
+            else:
+                if pid not in pid_to_color:
+                    pid_to_color[pid] = color_palette[next_color_index % len(color_palette)]
+                    next_color_index += 1
+                fill_color = pid_to_color[pid]
+                label = pid
+
+            # Rectangle representing the CPU execution interval.
+            self.gantt_canvas.create_rectangle(x1, bar_top, x2, bar_bottom, fill=fill_color, outline="black")
+
+            # Text label in the middle of the rectangle.
+            self.gantt_canvas.create_text(
+                (x1 + x2) / 2,
+                (bar_top + bar_bottom) / 2,
+                text=label,
+                font=("Arial", 9),
+            )
+
+            # Time tick at the start of the segment.
+            self.gantt_canvas.create_line(x1, bar_bottom, x1, bar_bottom + 5)
+            self.gantt_canvas.create_text(
+                x1,
+                bar_bottom + 7,
+                text=str(start),
+                anchor="n",
+                font=("Arial", 8),
+            )
+
+        # Time tick at the final end time.
+        final_x = left_margin + total_time * time_scale
+        self.gantt_canvas.create_line(final_x, bar_bottom, final_x, bar_bottom + 5)
+        self.gantt_canvas.create_text(
+            final_x,
+            bar_bottom + 7,
+            text=str(total_time),
+            anchor="n",
+            font=("Arial", 8),
+        )
+
+    # ------------------------------------------------------------------#
+    # Mainloop                                                          #
+    # ------------------------------------------------------------------#
+
+    def run(self) -> None:
+        """Start the Tkinter main event loop."""
+        self.root.mainloop()
+
+
+def main() -> None:
+    """Entry point when running this module as a script."""
+    app = CPUSchedulerApp()
+    app.run()
+
 
 if __name__ == "__main__":
     main()
