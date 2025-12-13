@@ -735,14 +735,15 @@ class CPUSchedulerApp:
         )
         remove_button.grid(row=1, column=7, padx=10, pady=4)
 
-        # Treeview to display the current list of processes.
+        # Treeview to display the current list of processes (styled like the metrics table).
         columns = ("pid", "arrival", "burst", "priority")
         self.process_tree = ttk.Treeview(
-            frame, columns=columns, show="headings", height=5
+            frame,
+            columns=columns,
+            show="headings",
+            height=8,  # show more input rows at once
         )
-        self.process_tree.heading("pid", text="PID")
-        self.process_tree.heading("arrival", text="Arrival")
-        self.process_tree.heading("burst", text="Burst")
+        self.process_tree.heading("pid",eading("burst", text="Burst")
         self.process_tree.heading("priority", text="Priority")
 
         for col in columns:
@@ -921,6 +922,10 @@ class CPUSchedulerApp:
             # Center all values; allow columns to stretch with the window.
             self.results_tree.column(col, anchor="center", width=90, stretch=True)
 
+        # Striped rows for readability.
+        self.results_tree.tag_configure("evenrow", background="#020617")
+        self.results_tree.tag_configure("oddrow", background="#111827")
+
         # Let the table fill the available space at the bottom of the window.
         self.results_tree.pack(
             side="left",
@@ -930,11 +935,7 @@ class CPUSchedulerApp:
             pady=4,
         )
 
-        metrics_scrollbar = ttk.Scrollbar(
-            table_container, orient="vertical", command=self.results_tree.yview
-        )
-        self.results_tree.configure(yscroll=metrics_scrollbar.set)
-        metrics_scrollbar.pack(side="right", fill="y", padx=(0, 4), pady=4)
+        metrics_scrollbarrics_scrollbar.pack(side="right", fill="y", padx=(0, 4), pady=4)
 
     # ------------------------------------------------------------------#
     # Process list operations                                           #
@@ -978,7 +979,16 @@ class CPUSchedulerApp:
         pid = f"P{self._next_pid}"
         self._next_pid += 1
 
-        self.process_tree.insert("", "end", values=(pid, arrival, burst, priority))
+        # Determine row stripe (even/odd) to match the metrics table style.
+        row_index = len(self.process_tree.get_children())
+        tag = "evenrow" if row_index % 2 == 0 else "oddrow"
+
+        self.process_tree.insert(
+            "",
+            "end",
+            values=(pid, arrival, burst, priority),
+            tags=(tag,),
+        )
 
         # Clear input fields to make adding the next process easier.
         self.arrival_entry.delete(0, tk.END)
@@ -991,6 +1001,9 @@ class CPUSchedulerApp:
         for item in selection:
             self.process_tree.delete(item)
 
+        # Re-apply row striping after deletions.
+        self._restyle_process_tree_rows()
+
     def clear_all(self) -> None:
         """Clear all processes, results, and the Gantt chart."""
         for item in self.process_tree.get_children():
@@ -1001,13 +1014,23 @@ class CPUSchedulerApp:
 
         self.gantt_canvas.delete("all")
         self.avg_waiting_label.configure(text="Average Waiting Time: N/A")
+        self.avg_turnaround_label.configure(text="Average Turnaround Time: N/A")
 
         # Reset PID counter so new processes start again at P1.
         self._next_pid = 1
 
+        # Re-apply striping (no rows, but keeps things consistent if extended later).
+        self._restyle_process_tree_rows()
+
     # ------------------------------------------------------------------#
     # Simulation + visualization                                       #
     # ------------------------------------------------------------------#
+
+    def _restyle_process_tree_rows(self) -> None:
+        """Apply alternating row colors to the process input Treeview."""
+        for index, item in enumerate(self.process_tree.get_children()):
+            tag = "evenrow" if index % 2 == 0 else "oddrow"
+            self.process_tree.item(item, tags=(tag,))
 
     def _get_processes_from_tree(self) -> List[Process]:
         """
