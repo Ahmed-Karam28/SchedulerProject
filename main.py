@@ -671,7 +671,8 @@ class CPUSchedulerApp:
         main_frame.pack(fill="both", expand=True, padx=16, pady=16)
 
         # Title area.
-        header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header_frame = ctk.CTkFrame(main_frame, fg_color="transpare_codentnew"</)
+")
         header_frame.pack(fill="x", pady=(0, 10))
 
         title_label = ctk.CTkLabel(
