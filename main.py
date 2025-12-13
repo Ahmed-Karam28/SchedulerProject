@@ -813,10 +813,20 @@ class CPUSchedulerApp:
         self.quantum_entry.grid(row=5, column=2, padx=5, pady=3, sticky="w")
 
         # Simulation control buttons.
-        run_button = ttk.Button(frame, text="Run Simulation", command=self.run_simulation, style="Primary.TButton")
-ow=0, column=3, padx=10, pady=3, rowspan=3, sticky="ew")
+        run_button = ttk.Button(
+            frame,
+            text="Run Simulation",
+            command=self.run_simulation,
+            style="Primary.TButton",
+        )
+        run_button.grid(row=0, column=3, padx=10, pady=3, rowspan=3, sticky="ew")
 
-        clear_button = ttk.Button(frame, text="Clear All", command=self.clear_all)
+        clear_button = ttk.Button(
+            frame,
+            text="Clear All",
+            command=self.clear_all,
+            style="Primary.TButton",
+        )
         clear_button.grid(row=3, column=3, padx=10, pady=3, rowspan=3, sticky="ew")
 
         frame.columnconfigure(0, weight=1)
