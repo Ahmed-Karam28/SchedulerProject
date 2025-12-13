@@ -785,9 +785,6 @@ class CPUSchedulerApp:
         )
         self.algorithm_combobox.grid(row=0, column=1, padx=8, pady=10, sticky="w")
 
-        # Make sure internal variable matches initial selection and quantum state.
-        self._on_algorithm_combobox_change(self._algorithm_label_var.get())
-
         # Time quantum controls (only used for RR).
         quantum_label = ctk.CTkLabel(frame, text="Time Quantum")
         quantum_label.grid(row=0, column=2, padx=(20, 4), pady=10, sticky="e")
@@ -795,6 +792,9 @@ class CPUSchedulerApp:
         self.quantum_entry = ctk.CTkEntry(frame, width=80)
         self.quantum_entry.insert(0, "2")
         self.quantum_entry.grid(row=0, column=3, padx=(0, 10), pady=10, sticky="w")
+
+        # Make sure internal variable matches initial selection and quantum state.
+        self._on_algorithm_combobox_change(self._algorithm_label_var.get())
 
         # Simulation control buttons.
         run_button = ctk.CTkButton(
