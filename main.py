@@ -815,24 +815,30 @@ class CPUSchedulerApp:
         )
         clear_button.grid(row=0, column=5, padx=(5, 10), pady=10)
 
-        # Prominent average labels directly below the Run button, stacked vertically.
+        # Small container under the Run button to stack the average labels vertically.
+        averages_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        averages_frame.grid(
+            row=1,
+            column=4,
+            columnspan=2,
+            padx=(10, 10),
+            pady=(0, 10),
+            sticky="ne",
+        )
+
         self.avg_waiting_label = ctk.CTkLabel(
-            frame,
+            averages_frame,
             text="Average Waiting Time: N/A",
             font=("Segoe UI Semibold", 16),
         )
-        self.avg_waiting_label.grid(
-            row=1, column=4, columnspan=2, padx=(10, 5), pady=(0, 2), sticky="e"
-        )
+        self.avg_waiting_label.pack(anchor="e")
 
         self.avg_turnaround_label = ctk.CTkLabel(
-            frame,
+            averages_frame,
             text="Average Turnaround Time: N/A",
             font=("Segoe UI Semibold", 16),
         )
-        self.avg_turnaround_label.grid(
-            row=2, column=4, columnspan=2, padx=(10, 5), pady=(0, 10), sticky="e"
-        )
+        self.avg_turnaround_label.pack(anchor="e")
 
         frame.columnconfigure(1, weight=1)
 
