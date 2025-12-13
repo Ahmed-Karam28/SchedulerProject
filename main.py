@@ -815,14 +815,14 @@ class CPUSchedulerApp:
         )
         clear_button.grid(row=0, column=5, padx=(5, 10), pady=10)
 
-        # Prominent average labels directly below the controls.
+        # Prominent average labels directly below the Run button, stacked vertically.
         self.avg_waiting_label = ctk.CTkLabel(
             frame,
             text="Average Waiting Time: N/A",
             font=("Segoe UI Semibold", 16),
         )
         self.avg_waiting_label.grid(
-            row=1, column=0, columnspan=3, padx=12, pady=(0, 10), sticky="w"
+            row=1, column=4, columnspan=2, padx=(10, 5), pady=(0, 2), sticky="e"
         )
 
         self.avg_turnaround_label = ctk.CTkLabel(
@@ -831,7 +831,7 @@ class CPUSchedulerApp:
             font=("Segoe UI Semibold", 16),
         )
         self.avg_turnaround_label.grid(
-            row=1, column=3, columnspan=3, padx=12, pady=(0, 10), sticky="e"
+            row=2, column=4, columnspan=2, padx=(10, 5), pady=(0, 10), sticky="e"
         )
 
         frame.columnconfigure(1, weight=1)
