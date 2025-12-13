@@ -204,6 +204,105 @@ def sjf_scheduling(processes: List[Process]) -> Tuple[List[ScheduleEntry], List[
     return schedule, stats
 
 
+def sjf_preemptive_scheduling(processes: List[Process]) -> Tuple[List[ScheduleEntry], List[Dict[str, Any]]]:
+    """
+    Shortest Remaining Time First (preemptive SJF) scheduling.
+
+    Concept:
+        - Preemptive version of SJF.
+        - At every time unit, among the ready processes, choose the one
+          with the smallest remaining burst time.
+        - A newly arrived process with a shorter remaining time can preempt
+          the currently running one at its arrival time.
+        - If no process is ready, the CPU is idle until the next arrival.
+
+    Implementation details:
+        - Time is modeled in discrete units (burst and arrival times are
+          integers).
+        - The algorithm simulates the CPU one time unit at a time, always
+          re-evaluating which process should run next.
+        - The Gantt chart schedule merges consecutive time units where the
+          same process runs into a single bar.
+    """
+    if not processes:
+        return [], []
+
+    procs = sorted(processes, key=lambda p: (p.arrival_time, p.pid))
+    n = len(procs)
+
+    remaining: Dict[str, int] = {p.pid: p.burst_time for p in procs}
+    completion_times: Dict[str, int] = {}
+
+    schedule: List[ScheduleEntry] = []
+    ready_queue: List[Process] = []
+
+    current_time = 0
+    next_index = 0  # Next process that has not yet been added to the ready queue
+
+    while len(completion_times) < n:
+        # Add all processes that have arrived by current_time to the ready queue.
+        while next_index < n and procs[next_index].arrival_time <= current_time:
+            ready_queue.append(procs[next_index])
+            next_index += 1
+
+        if not ready_queue:
+            # No ready processes -> CPU idle until the next arrival.
+            if next_index < n:
+                next_arrival = procs[next_index].arrival_time
+                if current_time < next_arrival:
+                    if schedule and schedule[-1]["pid"] is None and schedule[-1]["end"] == current_time:
+                        # Extend existing idle block.
+                        schedule[-1]["end"] = next_arrival
+                    else:
+                        schedule.append({"pid": None, "start": current_time, "end": next_arrival})
+                current_time = next_arrival
+                continue
+            else:
+                # No more processes to arrive and none ready; should not occur
+                # if the loop condition is correct, but break defensively.
+                break
+
+        # Choose the process with the smallest remaining time.
+        ready_queue.sort(key=lambda p: (remaining[p.pid], p.arrival_time, p.pid))
+        current = ready_queue[0]
+        pid = current.pid
+
+        # Run the chosen process for one time unit.
+        if schedule and schedule[-1]["pid"] == pid and schedule[-1]["end"] == current_time:
+            schedule[-1]["end"] += 1
+        else:
+            schedule.append({"pid": pid, "start": current_time, "end": current_time + 1})
+
+        remaining[pid] -= 1
+        current_time += 1
+
+        if remaining[pid] == 0:
+            # Process has finished at current_time.
+            completion_times[pid] = current_time
+            # Remove it from the ready queue.
+            ready_queue = [p for p in ready_queue if p.pid != pid]
+
+    # Compute metrics.
+    stats: List[Dict[str, Any]] = []
+    for p in sorted(procs, key=lambda p: p.pid):
+        ct = completion_times[p.pid]
+        tat = ct - p.arrival_time
+        wt = tat - p.burst_time
+        stats.append(
+            {
+                "pid": p.pid,
+                "arrival_time": p.arrival_time,
+                "burst_time": p.burst_time,
+                "priority": p.priority,
+                "completion_time": ct,
+                "turnaround_time": tat,
+                "waiting_time": wt,
+            }
+        )
+
+    return schedule, stats
+
+
 def priority_scheduling(processes: List[Process]) -> Tuple[List[ScheduleEntry], List[Dict[str, Any]]]:
     """
     Priority scheduling, non-preemptive.
@@ -264,6 +363,95 @@ def priority_scheduling(processes: List[Process]) -> Tuple[List[ScheduleEntry], 
         completion_times[current.pid] = end
         current_time = end
         completed += 1
+
+    stats: List[Dict[str, Any]] = []
+    for p in sorted(procs, key=lambda p: p.pid):
+        ct = completion_times[p.pid]
+        tat = ct - p.arrival_time
+        wt = tat - p.burst_time
+        stats.append(
+            {
+                "pid": p.pid,
+                "arrival_time": p.arrival_time,
+                "burst_time": p.burst_time,
+                "priority": p.priority,
+                "completion_time": ct,
+                "turnaround_time": tat,
+                "waiting_time": wt,
+            }
+        )
+
+    return schedule, stats
+
+
+def priority_preemptive_scheduling(processes: List[Process]) -> Tuple[List[ScheduleEntry], List[Dict[str, Any]]]:
+    """
+    Priority scheduling, preemptive.
+
+    Convention:
+        - Lower numeric priority value means *higher* priority.
+          (Priority 1 is higher than 2.)
+
+    Concept:
+        - Preemptive.
+        - At every time unit, among the ready processes, the one with the
+          highest priority (smallest numeric value) is chosen.
+        - A newly arrived process with a higher priority can preempt the
+          currently running one at its arrival time.
+        - If no process is ready, the CPU is idle until the next arrival.
+    """
+    if not processes:
+        return [], []
+
+    procs = sorted(processes, key=lambda p: (p.arrival_time, p.pid))
+    n = len(procs)
+
+    remaining: Dict[str, int] = {p.pid: p.burst_time for p in procs}
+    completion_times: Dict[str, int] = {}
+
+    schedule: List[ScheduleEntry] = []
+    ready_queue: List[Process] = []
+
+    current_time = 0
+    next_index = 0
+
+    while len(completion_times) < n:
+        # Add newly arrived processes to the ready queue.
+        while next_index < n and procs[next_index].arrival_time <= current_time:
+            ready_queue.append(procs[next_index])
+            next_index += 1
+
+        if not ready_queue:
+            # CPU idle until the next arrival.
+            if next_index < n:
+                next_arrival = procs[next_index].arrival_time
+                if current_time < next_arrival:
+                    if schedule and schedule[-1]["pid"] is None and schedule[-1]["end"] == current_time:
+                        schedule[-1]["end"] = next_arrival
+                    else:
+                        schedule.append({"pid": None, "start": current_time, "end": next_arrival})
+                current_time = next_arrival
+                continue
+            else:
+                break
+
+        # Choose the ready process with the highest priority.
+        ready_queue.sort(key=lambda p: (p.priority, p.arrival_time, p.pid))
+        current = ready_queue[0]
+        pid = current.pid
+
+        # Run for one time unit.
+        if schedule and schedule[-1]["pid"] == pid and schedule[-1]["end"] == current_time:
+            schedule[-1]["end"] += 1
+        else:
+            schedule.append({"pid": pid, "start": current_time, "end": current_time + 1})
+
+        remaining[pid] -= 1
+        current_time += 1
+
+        if remaining[pid] == 0:
+            completion_times[pid] = current_time
+            ready_queue = [p for p in ready_queue if p.pid != pid]
 
     stats: List[Dict[str, Any]] = []
     for p in sorted(procs, key=lambda p: p.pid):
@@ -505,30 +693,44 @@ class CPUSchedulerApp:
 
         ttk.Radiobutton(
             frame,
+            text="Shortest Remaining Time First (SJF, preemptive)",
+            value="SJF_PREEMPTIVE",
+            variable=self.algorithm_var,
+        ).grid(row=2, column=0, padx=5, pady=3, sticky="w")
+
+        ttk.Radiobutton(
+            frame,
             text="Priority Scheduling (non-preemptive)",
             value="PRIORITY",
             variable=self.algorithm_var,
-        ).grid(row=2, column=0, padx=5, pady=3, sticky="w")
+        ).grid(row=3, column=0, padx=5, pady=3, sticky="w")
+
+        ttk.Radiobutton(
+            frame,
+            text="Priority Scheduling (preemptive)",
+            value="PRIORITY_PREEMPTIVE",
+            variable=self.algorithm_var,
+        ).grid(row=4, column=0, padx=5, pady=3, sticky="w")
 
         ttk.Radiobutton(
             frame,
             text="Round Robin (RR)",
             value="RR",
             variable=self.algorithm_var,
-        ).grid(row=3, column=0, padx=5, pady=3, sticky="w")
+        ).grid(row=5, column=0, padx=5, pady=3, sticky="w")
 
         # Time quantum controls (used only for RR, but always visible for simplicity).
-        ttk.Label(frame, text="Time Quantum:").grid(row=3, column=1, padx=5, pady=3, sticky="e")
+        ttk.Label(frame, text="Time Quantum:").grid(row=5, column=1, padx=5, pady=3, sticky="e")
         self.quantum_entry = ttk.Entry(frame, width=8)
         self.quantum_entry.insert(0, "2")  # sensible default
-        self.quantum_entry.grid(row=3, column=2, padx=5, pady=3, sticky="w")
+        self.quantum_entry.grid(row=5, column=2, padx=5, pady=3, sticky="w")
 
         # Simulation control buttons.
         run_button = ttk.Button(frame, text="Run Simulation", command=self.run_simulation)
-        run_button.grid(row=0, column=3, padx=10, pady=3, rowspan=2, sticky="ew")
+        run_button.grid(row=0, column=3, padx=10, pady=3, rowspan=3, sticky="ew")
 
         clear_button = ttk.Button(frame, text="Clear All", command=self.clear_all)
-        clear_button.grid(row=2, column=3, padx=10, pady=3, rowspan=2, sticky="ew")
+        clear_button.grid(row=3, column=3, padx=10, pady=3, rowspan=3, sticky="ew")
 
         frame.columnconfigure(0, weight=1)
         frame.columnconfigure(1, weight=0)
@@ -689,8 +891,12 @@ class CPUSchedulerApp:
                 schedule, stats = fcfs_scheduling(processes)
             elif algorithm == "SJF":
                 schedule, stats = sjf_scheduling(processes)
+            elif algorithm == "SJF_PREEMPTIVE":
+                schedule, stats = sjf_preemptive_scheduling(processes)
             elif algorithm == "PRIORITY":
                 schedule, stats = priority_scheduling(processes)
+            elif algorithm == "PRIORITY_PREEMPTIVE":
+                schedule, stats = priority_preemptive_scheduling(processes)
             elif algorithm == "RR":
                 quantum_text = self.quantum_entry.get().strip()
                 if not quantum_text:
