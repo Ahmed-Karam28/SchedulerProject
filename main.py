@@ -942,7 +942,11 @@ class CPUSchedulerApp:
             pady=4,
         )
 
-        metrics_scrollbarrics_scrollbar.pack(side="right", fill="y", padx=(0, 4), pady=4)
+        metrics_scrollbar = ttk.Scrollbar(
+            table_container, orient="vertical", command=self.results_tree.yview
+        )
+        self.results_tree.configure(yscroll=metrics_scrollbar.set)
+        metrics_scrollbar.pack(side="right", fill="y", padx=(0, 4), pady=4)
 
     # ------------------------------------------------------------------#
     # Process list operations                                           #
