@@ -743,10 +743,9 @@ class CPUSchedulerApp:
             show="headings",
             height=8,  # show more input rows at once
         )
-        self.process_tree.heading("pid",eading("burst", text="Burst")
-        self.process_tree.heading("priority", text="Priority")
-
-        for col in columns:
+        self.process_tree.heading("pid", text="PID")
+        self.process_tree.heading("arrival", text="Arrival")
+        self.process        for col in columns:
             self.process_tree.column(col, anchor="center", width=80, stretch=False)
 
         self.process_tree.grid(
@@ -1117,8 +1116,10 @@ class CPUSchedulerApp:
         for item in self.results_tree.get_children():
             self.results_tree.delete(item)
 
-        # Insert new metrics rows (strictly sorted by PID for consistent display).
-        for row in sorted(stats, key=lambda r: r["pid"]):
+        # Insert new metrics rows (strictly sorted by PID for consistent display),
+        # and apply alternating row colors to match the input table.
+        for index, row in enumerate(sorted(stats, key=lambda r: r["pid"])):
+            tag = "evenrow" if index % 2 == 0 else "oddrow"
             self.results_tree.insert(
                 "",
                 "end",
@@ -1131,8 +1132,8 @@ class CPUSchedulerApp:
                     row["turnaround_time"],
                     row["waiting_time"],
                 ),
-         _code  new </)
- )
+                tags=(tag,),
+            )
 
         self.avg_waiting_label.configure(
             text=f"Average Waiting Time: {avg_waiting:.2f}"
