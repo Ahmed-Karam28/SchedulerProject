@@ -966,7 +966,7 @@ class CPUSchedulerApp:
             self.results_tree.delete(item)
 
         self.gantt_canvas.delete("all")
-        self.avg_waiting_label.config(text="Average Waiting Time: N/A")
+        self.avg_waiting_label.configure(text="Average Waiting Time: N_code/Anew"</)
 
         # Reset PID counter so new processes start again at P1.
         self._next_pid = 1
@@ -1068,7 +1068,7 @@ class CPUSchedulerApp:
                 ),
             )
 
-        self.avg_waiting_label.config(text=f"Average Waiting Time: {avg_waiting:.2f}")
+        self.avg_waiting_label.configurext=f"Average Waiting Time: {avg_waiting:.2f}")
 
     def _draw_gantt_chart(self, schedule: List[ScheduleEntry]) -> None:
         """
