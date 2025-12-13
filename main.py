@@ -662,7 +662,12 @@ class CPUSchedulerApp:
 
     def _build_ui(self) -> None:
         """Create and lay out all GUI widgets."""
-        main_frame = ctk.CTkFrame(self.root, corner_radius=0, fg_color="transparent")
+        # Wrap the entire content in a scrollable frame so the bottom sections
+        # (Gantt chart and Process Metrics table) remain accessible on smaller screens.
+        main_frame = ctk.CTkScrollableFrame(
+            self.root,
+            corner_radius=0,
+        )
         main_frame.pack(fill="both", expand=True, padx=16, pady=16)
 
         # Title area.
