@@ -25,6 +25,7 @@ style so that it can be used as part of an OS course report.
 
 import tkinter as tk
 from tkinter import ttk, messagebox
+import customtkinter as ctk
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -583,7 +584,7 @@ def round_robin_scheduling(
 
 class CPUSchedulerApp:
     """
-    Tkinter-based GUI for exploring CPU scheduling algorithms.
+    customtkinter-based GUI for exploring CPU scheduling algorithms.
 
     High-level structure:
         - Top section: process input (arrival, burst, priority) + list of processes.
@@ -591,148 +592,154 @@ class CPUSchedulerApp:
         - Bottom section: Gantt chart (Canvas) + metrics table (Treeview).
     """
 
-    def __init__(self, root: Optional[tk.Tk] = None) -> None:
+    def __init__(self, root: Optional[ctk.CTk] = None) -> None:
+        # Configure global appearance for customtkinter.
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("dark-blue")
+
         if root is None:
-            root = tk.Tk()
+            root = ctk.CTk()
         self.root = root
         self.root.title("CPU Scheduling Simulator")
+        self.root.geometry("1100x700")
 
-        # Apply a light, modern theme similar to Windows 11.
-        self.root.configure(bg="#F3F4F6")
+        # Algorithm selection: store internal key in algorithm_var.
+        self.algorithm_var = ctk.StringVar(value="FCFS")
 
-        style = ttk.Style(self.root)
-        # Use a theme that allows color customization; fall back if unavailable.
-        try:
-            style.theme_use("clam")
-        except tk.TclError:
-            pass
-
-        base_font = ("Segoe UI", 10)
-        style.configure(".", font=base_font)
-
-        # Frames and labeled frames.
-        style.configure("TFrame", background="#F3F4F6")
-        style.configure(
-            "TLabelframe",
-            background="#F3F4F6",
-            foreground="#111827",
-            borderwidth=1,
-        )
-        style.configure(
-            "TLabelframe.Label",
-            background="#F3F4F6",
-            foreground="#111827",
-            font=("Segoe UI Semibold", 10),
-        )
-
-        # Labels and buttons.
-        style.configure("TLabel", background="#F3F4F6", foreground="#111827")
-
-        style.configure(
-            "TButton",
-            background="#E5E7EB",
-            foreground="#111827",
-            padding=6,
-            borderwidth=0,
-        )
-        style.map(
-            "TButton",
-            background=[("active", "#D1D5DB")],
-        )
-
-        # Primary buttons (used for Run / Clear).
-        style.configure(
-            "Primary.TButton",
-            background="#2563EB",
-            foreground="#FFFFFF",
-            padding=6,
-            borderwidth=0,
-        )
-        style.map(
-            "Primary.TButton",
-            background=[("active", "#1D4ED8")],
-        )
-
-        # Treeview styling for a clean, light table look.
-        style.configure(
-            "Treeview",
-            background="#FFFFFF",
-            foreground="#111827",
-            fieldbackground="#FFFFFF",
-            bordercolor="#E5E7EB",
-            borderwidth=1,
-        )
-        style.configure(
-            "Treeview.Heading",
-            background="#F3F4F6",
-            foreground="#111827",
-            font=("Segoe UI Semibold", 9),
+        # Mapping from human-readable labels to internal keys.
+        self._algorithm_display_to_key: Dict[str, str] = {
+            "First-Come, First-Served (FCFS)": "FCFS",
+            "Shortest Job First (SJF, non-preemptive)": "SJF",
+            "Shortest Remaining Time First (SJF, preemptive)": "SJF_PREEMPTIVE",
+            "Priority Scheduling (non-preemptive)": "PRIORITY",
+            "Priority Scheduling (preemptive)": "PRIORITY_PREEMPTIVE",
+            "Round Robin (RR)": "RR",
+        }
+        self._algorithm_label_var = ctk.StringVar(
+            value="First-Come, First-Served (FCFS)"
         )
 
         # Counter used to assign new process identifiers (P1, P2, ...).
         self._next_pid = 1
 
+        # Configure ttk-based widgets (Treeview) to match the dark theme.
+        self._configure_treeview_style()
+
         self._build_ui()
+
+    def _configure_treeview_style(self) -> None:
+        """Apply a dark theme to ttk Treeview widgets so they match customtkinter."""
+        style = ttk.Style(self.root)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        style.configure(
+            "Treeview",
+            background="#020617",
+            foreground="#E5E7EB",
+            fieldbackground="#020617",
+            bordercolor="#1F2937",
+            borderwidth=1,
+            rowheight=22,
+        )
+        style.map(
+            "Treeview",
+            background=[("selected", "#1D4ED8")],
+            foreground=[("selected", "#F9FAFB")],
+        )
+        style.configure(
+            "Treeview.Heading",
+            background="#0F172A",
+            foreground="#E5E7EB",
+            font=("Segoe UI Semibold", 9),
+        )
 
     # ------------------------------------------------------------------#
     # UI construction                                                   #
     # ------------------------------------------------------------------#
 
     def _build_ui(self) -> None:
-        """Create and lay out all Tkinter widgets."""
-        main_frame = ttk.Frame(self.root, padding=16)
-        main_frame.pack(fill="both", expand=True)
+        """Create and lay out all GUI widgets."""
+        main_frame = ctk.CTkFrame(self.root, corner_radius=0, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=16, pady=16)
 
         # Title area.
-        title_label = ttk.Label(
-            main_frame,
+        header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 10))
+
+        title_label = ctk.CTkLabel(
+            header_frame,
             text="CPU Scheduling Simulator",
-            font=("Segoe UI Semibold", 16),
+            font=("Segoe UI Semibold", 22),
         )
-        subtitle_label = ttk.Label(
-            main_frame,
+        subtitle_label = ctk.CTkLabel(
+            header_frame,
             text="FCFS • SJF • SRTF • Priority • Round Robin",
-            font=("Segoe UI", 10),
-            foreground="#9CA3AF",
+            font=("Segoe UI", 12),
         )
         title_label.pack(anchor="w")
-        subtitle_label.pack(anchor="w", pady=(0, 10))
+        subtitle_label.pack(anchor="w")
 
-        # Process input section.
+        # Process input, algorithm selection, and output.
         self._build_process_input_section(main_frame)
-
-        # Algorithm selection section.
         self._build_algorithm_section(main_frame)
-
-        # Output section (Gantt chart + metrics).
         self._build_output_section(main_frame)
 
-    def _build_process_input_section(self, parent: ttk.Frame) -> None:
-        frame = ttk.LabelFrame(parent, text="Process Input")
-        frame.pack(fill="x", expand=False, pady=(0, 10))
+    def _build_process_input_section(self, parent: ctk.CTkFrame) -> None:
+        frame = ctk.CTkFrame(parent, corner_radius=12)
+        frame.pack(fill="x", pady=(10, 10))
+
+        header = ctk.CTkLabel(
+            frame,
+            text="Process Input",
+            font=("Segoe UI Semibold", 13),
+        )
+        header.grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 6), sticky="w")
 
         # Input row: arrival time, burst time, priority, and buttons.
-        ttk.Label(frame, text="Arrival Time").grid(row=0, column=0, padx=5, pady=3, sticky="w")
-        self.arrival_entry = ttk.Entry(frame, width=10)
-        self.arrival_entry.grid(row=0, column=1, padx=5, pady=3)
+        ctk.CTkLabel(frame, text="Arrival Time").grid(
+            row=1, column=0, padx=12, pady=4, sticky="w"
+        )
+        self.arrival_entry = ctk.CTkEntry(frame, width=80)
+        self.arrival_entry.grid(row=1, column=1, padx=6, pady=4, sticky="w")
 
-        ttk.Label(frame, text="Burst Time").grid(row=0, column=2, padx=5, pady=3, sticky="w")
-        self.burst_entry = ttk.Entry(frame, width=10)
-        self.burst_entry.grid(row=0, column=3, padx=5, pady=3)
+        ctk.CTkLabel(frame, text="Burst Time").grid(
+            row=1, column=2, padx=12, pady=4, sticky="w"
+        )
+        self.burst_entry = ctk.CTkEntry(frame, width=80)
+        self.burst_entry.grid(row=1, column=3, padx=6, pady=4, sticky="w")
 
-        ttk.Label(frame, text="Priority\n(lower = higher)").grid(row=0, column=4, padx=5, pady=3, sticky="w")
-        self.priority_entry = ttk.Entry(frame, width=10)
-        self.priority_entry.grid(row=0, column=5, padx=5, pady=3)
+        ctk.CTkLabel(frame, text="Priority\n(lower = higher)").grid(
+            row=1, column=4, padx=12, pady=4, sticky="w"
+        )
+        self.priority_entry = ctk.CTkEntry(frame, width=80)
+        self.priority_entry.grid(row=1, column=5, padx=6, pady=4, sticky="w")
 
-        add_button = ttk.Button(frame, text="Add Process", command=self.add_process)
-        add_button.grid(row=0, column=6, padx=5, pady=3)
+        add_button = ctk.CTkButton(
+            frame,
+            text="Add Process",
+            command=self.add_process,
+            width=110,
+        )
+        add_button.grid(row=1, column=6, padx=10, pady=4)
 
-        remove_button = ttk.Button(frame, text="Remove Selected", command=self.remove_selected_process)
-        remove_button.grid(row=0, column=7, padx=5, pady=3)
+        remove_button = ctk.CTkButton(
+            frame,
+            text="Remove Selected",
+            command=self.remove_selected_process,
+            width=140,
+            fg_color="#1F2937",
+            hover_color="#111827",
+        )
+        remove_button.grid(row=1, column=7, padx=10, pady=4)
 
         # Treeview to display the current list of processes.
         columns = ("pid", "arrival", "burst", "priority")
-        self.process_tree = ttk.Treeview(frame, columns=columns, show="headings", height=6)
+        self.process_tree = ttk.Treeview(
+            frame, columns=columns, show="headings", height=5
+        )
         self.process_tree.heading("pid", text="PID")
         self.process_tree.heading("arrival", text="Arrival")
         self.process_tree.heading("burst", text="Burst")
@@ -741,118 +748,116 @@ class CPUSchedulerApp:
         for col in columns:
             self.process_tree.column(col, anchor="center", width=80, stretch=False)
 
-        self.process_tree.grid(row=1, column=0, columnspan=8, sticky="nsew", pady=(5, 0))
+        self.process_tree.grid(
+            row=2, column=0, columnspan=8, sticky="nsew", padx=12, pady=(8, 10)
+        )
 
-        # Scrollbar for the Treeview.
-        scrollbar = ttk.Scrollbar(frame, orient="vertical", command=self.process_tree.yview)
+        scrollbar = ttk.Scrollbar(
+            frame, orient="vertical", command=self.process_tree.yview
+        )
         self.process_tree.configure(yscroll=scrollbar.set)
-        scrollbar.grid(row=1, column=8, sticky="ns", pady=(5, 0))
+        scrollbar.grid(row=2, column=8, sticky="ns", pady=(8, 10))
 
         # Allow the tree to expand horizontally.
-        frame.columnconfigure(0, weight=1)
-        frame.columnconfigure(1, weight=1)
-        frame.columnconfigure(2, weight=1)
-        frame.columnconfigure(3, weight=1)
-        frame.columnconfigure(4, weight=1)
-        frame.columnconfigure(5, weight=1)
-        frame.columnconfigure(6, weight=0)
-        frame.columnconfigure(7, weight=0)
+        for col_index in range(8):
+            frame.columnconfigure(col_index, weight=1)
+        frame.rowconfigure(2, weight=1)
 
-    def _build_algorithm_section(self, parent: ttk.Frame) -> None:
-        frame = ttk.LabelFrame(parent, text="Scheduling Algorithm")
-        frame.pack(fill="x", expand=False, pady=(0, 10))
+    def _build_algorithm_section(self, parent: ctk.CTkFrame) -> None:
+        frame = ctk.CTkFrame(parent, corner_radius=12)
+        frame.pack(fill="x", pady=(0, 10))
 
-        self.algorithm_var = tk.StringVar(value="FCFS")
-
-        ttk.Radiobutton(
+        algo_label = ctk.CTkLabel(
             frame,
-            text="First-Come, First-Served (FCFS)",
-            value="FCFS",
-            variable=self.algorithm_var,
-        ).grid(row=0, column=0, padx=5, pady=3, sticky="w")
+            text="Scheduling Algorithm",
+            font=("Segoe UI Semibold", 13),
+        )
+        algo_label.grid(row=0, column=0, padx=12, pady=10, sticky="w")
 
-        ttk.Radiobutton(
+        # Combobox for algorithm selection.
+        self.algorithm_combobox = ctk.CTkComboBox(
             frame,
-            text="Shortest Job First (SJF, non-preemptive)",
-            value="SJF",
-            variable=self.algorithm_var,
-        ).grid(row=1, column=0, padx=5, pady=3, sticky="w")
+            values=list(self._algorithm_display_to_key.keys()),
+            variable=self._algorithm_label_var,
+            width=320,
+            state="readonly",
+            command=self._on_algorithm_combobox_change,
+        )
+        self.algorithm_combobox.grid(row=0, column=1, padx=8, pady=10, sticky="w")
 
-        ttk.Radiobutton(
-            frame,
-            text="Shortest Remaining Time First (SJF, preemptive)",
-            value="SJF_PREEMPTIVE",
-            variable=self.algorithm_var,
-        ).grid(row=2, column=0, padx=5, pady=3, sticky="w")
+        # Make sure internal variable matches initial selection.
+        self._on_algorithm_combobox_change(self._algorithm_label_var.get())
 
-        ttk.Radiobutton(
-            frame,
-            text="Priority Scheduling (non-preemptive)",
-            value="PRIORITY",
-            variable=self.algorithm_var,
-        ).grid(row=3, column=0, padx=5, pady=3, sticky="w")
+        # Time quantum controls (only used for RR, but always visible).
+        quantum_label = ctk.CTkLabel(frame, text="Time Quantum")
+        quantum_label.grid(row=0, column=2, padx=(20, 4), pady=10, sticky="e")
 
-        ttk.Radiobutton(
-            frame,
-            text="Priority Scheduling (preemptive)",
-            value="PRIORITY_PREEMPTIVE",
-            variable=self.algorithm_var,
-        ).grid(row=4, column=0, padx=5, pady=3, sticky="w")
-
-        ttk.Radiobutton(
-            frame,
-            text="Round Robin (RR)",
-            value="RR",
-            variable=self.algorithm_var,
-        ).grid(row=5, column=0, padx=5, pady=3, sticky="w")
-
-        # Time quantum controls (used only for RR, but always visible for simplicity).
-        ttk.Label(frame, text="Time Quantum:").grid(row=5, column=1, padx=5, pady=3, sticky="e")
-        self.quantum_entry = ttk.Entry(frame, width=8)
-        self.quantum_entry.insert(0, "2")  # sensible default
-        self.quantum_entry.grid(row=5, column=2, padx=5, pady=3, sticky="w")
+        self.quantum_entry = ctk.CTkEntry(frame, width=80)
+        self.quantum_entry.insert(0, "2")
+        self.quantum_entry.grid(row=0, column=3, padx=(0, 10), pady=10, sticky="w")
 
         # Simulation control buttons.
-        run_button = ttk.Button(
+        run_button = ctk.CTkButton(
             frame,
             text="Run Simulation",
             command=self.run_simulation,
-            style="Primary.TButton",
+            width=140,
         )
-        run_button.grid(row=0, column=3, padx=10, pady=3, rowspan=3, sticky="ew")
+        run_button.grid(row=0, column=4, padx=(10, 5), pady=10)
 
-        clear_button = ttk.Button(
+        clear_button = ctk.CTkButton(
             frame,
             text="Clear All",
             command=self.clear_all,
-            style="Primary.TButton",
+            width=120,
+            fg_color="#1F2937",
+            hover_color="#111827",
         )
-        clear_button.grid(row=3, column=3, padx=10, pady=3, rowspan=3, sticky="ew")
+        clear_button.grid(row=0, column=5, padx=(5, 10), pady=10)
 
-        frame.columnconfigure(0, weight=1)
-        frame.columnconfigure(1, weight=0)
-        frame.columnconfigure(2, weight=0)
-        frame.columnconfigure(3, weight=0)
+        frame.columnconfigure(1, weight=1)
 
-    def _build_output_section(self, parent: ttk.Frame) -> None:
-        frame = ttk.Frame(parent)
+    def _on_algorithm_combobox_change(self, selected_label: str) -> None:
+        """Update internal algorithm key when the combobox selection changes."""
+        key = self._algorithm_display_to_key.get(selected_label, "FCFS")
+        self.algorithm_var.set(key)
+
+    def _build_output_section(self, parent: ctk.CTkFrame) -> None:
+        frame = ctk.CTkFrame(parent, corner_radius=12)
         frame.pack(fill="both", expand=True)
 
-        # Gantt chart.
-        gantt_frame = ttk.LabelFrame(frame, text="Gantt Chart")
-        gantt_frame.pack(fill="x", expand=False)
+        # Gantt chart section.
+        gantt_frame = ctk.CTkFrame(frame, corner_radius=12)
+        gantt_frame.pack(fill="x", padx=10, pady=(10, 0))
+
+        gantt_label = ctk.CTkLabel(
+            gantt_frame,
+            text="Gantt Chart",
+            font=("Segoe UI Semibold", 13),
+        )
+        gantt_label.pack(anchor="w", padx=12, pady=(10, 4))
 
         self.gantt_canvas = tk.Canvas(
             gantt_frame,
-            height=180,
-            bg="#F9FAFB",
+            height=220,
+            bg="#020617",
             highlightthickness=0,
         )
-        self.gantt_canvas.pack(fill="x", expand=True, padx=5, pady=5)
+        self.gantt_canvas.pack(fill="x", padx=12, pady=(0, 12))
 
-        # Process metrics table.
-        metrics_frame = ttk.LabelFrame(frame, text="Process Metrics")
-        metrics_frame.pack(fill="both", expand=True, pady=(10, 0))
+        # Process metrics section.
+        metrics_frame = ctk.CTkFrame(frame, corner_radius=12)
+        metrics_frame.pack(fill="both", expand=True, padx=10, pady=(10, 0))
+
+        metrics_label = ctk.CTkLabel(
+            metrics_frame,
+            text="Process Metrics",
+            font=("Segoe UI Semibold", 13),
+        )
+        metrics_label.pack(anchor="w", padx=12, pady=(10, 4))
+
+        table_container = ctk.CTkFrame(metrics_frame, fg_color="transparent")
+        table_container.pack(fill="both", expand=True, padx=8, pady=(0, 8))
 
         result_columns = (
             "pid",
@@ -863,7 +868,9 @@ class CPUSchedulerApp:
             "turnaround",
             "waiting",
         )
-        self.results_tree = ttk.Treeview(metrics_frame, columns=result_columns, show="headings", height=8)
+        self.results_tree = ttk.Treeview(
+            table_container, columns=result_columns, show="headings", height=7
+        )
 
         headings = [
             ("pid", "PID"),
@@ -878,14 +885,22 @@ class CPUSchedulerApp:
             self.results_tree.heading(col, text=label)
             self.results_tree.column(col, anchor="center", width=90, stretch=False)
 
-        self.results_tree.pack(side="left", fill="both", expand=True, padx=(5, 0), pady=5)
+        self.results_tree.pack(
+            side="left", fill="both", expand=True, padx=(4, 0), pady=4
+        )
 
-        metrics_scrollbar = ttk.Scrollbar(metrics_frame, orient="vertical", command=self.results_tree.yview)
+        metrics_scrollbar = ttk.Scrollbar(
+            table_container, orient="vertical", command=self.results_tree.yview
+        )
         self.results_tree.configure(yscroll=metrics_scrollbar.set)
-        metrics_scrollbar.pack(side="right", fill="y", pady=5, padx=(0, 5))
+        metrics_scrollbar.pack(side="right", fill="y", padx=(0, 4), pady=4)
 
-        self.avg_waiting_label = ttk.Label(metrics_frame, text="Average Waiting Time: N/A")
-        self.avg_waiting_label.pack(anchor="w", padx=5, pady=(0, 5))
+        self.avg_waiting_label = ctk.CTkLabel(
+            metrics_frame,
+            text="Average Waiting Time: N/A",
+            font=("Segoe UI", 11),
+        )
+        self.avg_waiting_label.pack(anchor="w", padx=12, pady=(0, 10))
 
     # ------------------------------------------------------------------#
     # Process list operations                                           #
@@ -1101,7 +1116,7 @@ class CPUSchedulerApp:
         bar_top = top_margin
         bar_bottom = bar_top + bar_height
 
-        # Color palette for processes (modern, vibrant colors).
+        # Color palette for processes (bright accents on dark background).
         color_palette = [
             "#22C55E",  # emerald
             "#3B82F6",  # blue
@@ -1117,6 +1132,9 @@ class CPUSchedulerApp:
         pid_to_color: Dict[str, str] = {}
         next_color_index = 0
 
+        label_font = ("Segoe UI", 9)
+        tick_font = ("Segoe UI", 8)
+
         # Draw each scheduled segment.
         for entry in schedule:
             start = entry["start"]
@@ -1130,7 +1148,7 @@ class CPUSchedulerApp:
             pid = entry["pid"]
             if pid is None:
                 # Idle time.
-                fill_color = "#DDDDDD"
+                fill_color = "#4B5563"
                 label = "Idle"
             else:
                 if pid not in pid_to_color:
@@ -1140,35 +1158,49 @@ class CPUSchedulerApp:
                 label = pid
 
             # Rectangle representing the CPU execution interval.
-            self.gantt_canvas.create_rectangle(x1, bar_top, x2, bar_bottom, fill=fill_color, outline="black")
+            self.gantt_canvas.create_rectangle(
+                x1,
+                bar_top,
+                x2,
+                bar_bottom,
+                fill=fill_color,
+                outline="#111827",
+            )
 
             # Text label in the middle of the rectangle.
             self.gantt_canvas.create_text(
                 (x1 + x2) / 2,
                 (bar_top + bar_bottom) / 2,
                 text=label,
-                font=("Arial", 9),
+                font=label_font,
+                fill="#F9FAFB",
             )
 
             # Time tick at the start of the segment.
-            self.gantt_canvas.create_line(x1, bar_bottom, x1, bar_bottom + 5)
+            self.gantt_canvas.create_line(
+                x1, bar_bottom, x1, bar_bottom + 5, fill="#4B5563"
+            )
             self.gantt_canvas.create_text(
                 x1,
                 bar_bottom + 7,
                 text=str(start),
                 anchor="n",
-                font=("Arial", 8),
+                font=tick_font,
+                fill="#D1D5DB",
             )
 
         # Time tick at the final end time.
         final_x = left_margin + total_time * time_scale
-        self.gantt_canvas.create_line(final_x, bar_bottom, final_x, bar_bottom + 5)
+        self.gantt_canvas.create_line(
+            final_x, bar_bottom, final_x, bar_bottom + 5, fill="#4B5563"
+        )
         self.gantt_canvas.create_text(
             final_x,
             bar_bottom + 7,
             text=str(total_time),
             anchor="n",
-            font=("Arial", 8),
+            font=tick_font,
+            fill="#D1D5DB",
         )
 
     # ------------------------------------------------------------------#
