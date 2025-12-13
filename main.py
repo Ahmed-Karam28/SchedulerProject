@@ -597,6 +597,53 @@ class CPUSchedulerApp:
         self.root = root
         self.root.title("CPU Scheduling Simulator")
 
+        # Apply a more modern dark theme using ttk styles.
+        self.root.configure(bg="#020617")  # dark background
+
+        style = ttk.Style(self.root)
+        # Use a theme that allows color customization; fall back if unavailable.
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        # Base font for the entire application.
+        style.configure(".", font=("Segoe UI", 10))
+
+        # Frames and labeled frames.
+        style.configure("TFrame", background="#020617")
+        style.configure("TLabelframe", background="#020617", foreground="#E5E7EB")
+        style.configure("TLabelframe.Label", background="#020617", foreground="#E5E7EB")
+
+        # Labels and buttons.
+        style.configure("TLabel", background="#020617", foreground="#E5E7EB")
+        style.configure(
+            "TButton",
+            background="#0F172A",
+            foreground="#E5E7EB",
+            borderwidth=0,
+            padding=6,
+        )
+        style.map(
+            "TButton",
+            background=[("active", "#1F2937")],
+        )
+
+        # Treeview styling for a modern dark table look.
+        style.configure(
+            "Treeview",
+            background="#020617",
+            foreground="#E5E7EB",
+            fieldbackground="#020617",
+            bordercolor="#1F2937",
+            borderwidth=1,
+        )
+        style.configure(
+            "Treeview.Heading",
+            background="#0F172A",
+            foreground="#E5E7EB",
+        )
+
         # Counter used to assign new process identifiers (P1, P2, ...).
         self._next_pid = 1
 
@@ -608,8 +655,23 @@ class CPUSchedulerApp:
 
     def _build_ui(self) -> None:
         """Create and lay out all Tkinter widgets."""
-        main_frame = ttk.Frame(self.root, padding=10)
+        main_frame = ttk.Frame(self.root, padding=16)
         main_frame.pack(fill="both", expand=True)
+
+        # Title area.
+        title_label = ttk.Label(
+            main_frame,
+            text="CPU Scheduling Simulator",
+            font=("Segoe UI Semibold", 16),
+        )
+        subtitle_label = ttk.Label(
+            main_frame,
+            text="FCFS • SJF • SRTF • Priority • Round Robin",
+            font=("Segoe UI", 10),
+            foreground="#9CA3AF",
+        )
+        title_label.pack(anchor="w")
+        subtitle_label.pack(anchor="w", pady=(0, 10))
 
         # Process input section.
         self._build_process_input_section(main_frame)
