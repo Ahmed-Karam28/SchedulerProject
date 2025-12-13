@@ -815,6 +815,25 @@ class CPUSchedulerApp:
         )
         clear_button.grid(row=0, column=5, padx=(5, 10), pady=10)
 
+        # Prominent average labels directly below the controls.
+        self.avg_waiting_label = ctk.CTkLabel(
+            frame,
+            text="Average Waiting Time: N/A",
+            font=("Segoe UI Semibold", 16),
+        )
+        self.avg_waiting_label.grid(
+            row=1, column=0, columnspan=3, padx=12, pady=(0, 10), sticky="w"
+        )
+
+        self.avg_turnaround_label = ctk.CTkLabel(
+            frame,
+            text="Average Turnaround Time: N/A",
+            font=("Segoe UI Semibold", 16),
+        )
+        self.avg_turnaround_label.grid(
+            row=1, column=3, columnspan=3, padx=12, pady=(0, 10), sticky="e"
+        )
+
         frame.columnconfigure(1, weight=1)
 
     def _on_algorithm_combobox_change(self, selected_label: str) -> None:
@@ -900,30 +919,6 @@ class CPUSchedulerApp:
         )
         self.results_tree.configure(yscroll=metrics_scrollbar.set)
         metrics_scrollbar.pack(side="right", fill="y", padx=(0, 4), pady=4)
-
-        # Summary cards for averages.
-        summary_frame = ctk.CTkFrame(metrics_frame, fg_color="transparent")
-        summary_frame.pack(fill="x", padx=8, pady=(0, 10))
-
-        waiting_card = ctk.CTkFrame(summary_frame, corner_radius=12)
-        waiting_card.pack(side="left", padx=(4, 8), pady=4, fill="x", expand=True)
-
-        turnaround_card = ctk.CTkFrame(summary_frame, corner_radius=12)
-        turnaround_card.pack(side="left", padx=(8, 4), pady=4, fill="x", expand=True)
-
-        self.avg_waiting_label = ctk.CTkLabel(
-            waiting_card,
-            text="Average Waiting Time: N/A",
-            font=("Segoe UI Semibold", 14),
-        )
-        self.avg_waiting_label.pack(anchor="center", padx=12, pady=10)
-
-        self.avg_turnaround_label = ctk.CTkLabel(
-            turnaround_card,
-            text="Average Turnaround Time: N/A",
-            font=("Segoe UI Semibold", 14),
-        )
-        self.avg_turnaround_label.pack(anchor="center", padx=12, pady=10)
 
     # ------------------------------------------------------------------#
     # Process list operations                                           #
