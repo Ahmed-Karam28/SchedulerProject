@@ -1094,8 +1094,8 @@ class CPUSchedulerApp:
         for item in self.results_tree.get_children():
             self.results_tree.delete(item)
 
-        # Insert new metrics rows.
-        for row in stats:
+        # Insert new metrics rows (strictly sorted by PID for consistent display).
+        for row in sorted(stats, key=lambda r: r["pid"]):
             self.results_tree.insert(
                 "",
                 "end",
@@ -1108,7 +1108,8 @@ class CPUSchedulerApp:
                     row["turnaround_time"],
                     row["waiting_time"],
                 ),
-            )
+         _code  new </)
+ )
 
         self.avg_waiting_label.configure(
             text=f"Average Waiting Time: {avg_waiting:.2f}"
