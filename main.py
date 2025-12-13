@@ -667,12 +667,12 @@ class CPUSchedulerApp:
         main_frame = ctk.CTkScrollableFrame(
             self.root,
             corner_radius=0,
+            fg_color="transparent",
         )
         main_frame.pack(fill="both", expand=True, padx=16, pady=16)
 
         # Title area.
-        header_frame = ctk.CTkFrame(main_frame, fg_color="transpare_codentnew"</)
-")
+        header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         header_frame.pack(fill="x", pady=(0, 10))
 
         title_label = ctk.CTkLabel(
