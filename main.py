@@ -893,8 +893,12 @@ class CPUSchedulerApp:
             "turnaround",
             "waiting",
         )
+        # Tall Treeview to show more rows without scrolling.
         self.results_tree = ttk.Treeview(
-            table_container, columns=result_columns, show="headings", height=7
+            table_container,
+            columns=result_columns,
+            show="headings",
+            height=12,  # show more rows at once
         )
 
         headings = [
@@ -908,10 +912,16 @@ class CPUSchedulerApp:
         ]
         for col, label in headings:
             self.results_tree.heading(col, text=label)
-            self.results_tree.column(col, anchor="center", width=90, stretch=False)
+            # Center all values; allow columns to stretch with the window.
+            self.results_tree.column(col, anchor="center", width=90, stretch=True)
 
+        # Let the table fill the available space at the bottom of the window.
         self.results_tree.pack(
-            side="left", fill="both", expand=True, padx=(4, 0), pady=4
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(4, 0),
+            pady=4,
         )
 
         metrics_scrollbar = ttk.Scrollbar(
