@@ -745,8 +745,16 @@ class CPUSchedulerApp:
         )
         self.process_tree.heading("pid", text="PID")
         self.process_tree.heading("arrival", text="Arrival")
-        self.process        for col in columns:
-            self.process_tree.column(col, anchor="center", width=80, stretch=False)
+        self.process_tree.heading("burst", text="Burst")
+        self.process_tree.heading("priority", text="Priority")
+
+        for col in columns:
+            # Centered values and stretchable columns for consistency.
+            self.process_tree.column(col, anchor="center", width=90, stretch=True)
+
+        # Striped rows for readability (same colors as metrics table).
+        self.process_tree.tag_configure("evenrow", background="#020617")
+        self.process_tree.tag_configure("oddrow", background="#111827")
 
         self.process_tree.grid(
             row=2, column=0, columnspan=8, sticky="nsew", padx=12, pady=(8, 10)
