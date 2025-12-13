@@ -597,8 +597,8 @@ class CPUSchedulerApp:
         self.root = root
         self.root.title("CPU Scheduling Simulator")
 
-        # Apply a more modern dark theme using ttk styles.
-        self.root.configure(bg="#020617")  # dark background
+        # Apply a light, modern theme similar to Windows 11.
+        self.root.configure(bg="#F3F4F6")
 
         style = ttk.Style(self.root)
         # Use a theme that allows color customization; fall back if unavailable.
@@ -607,41 +607,66 @@ class CPUSchedulerApp:
         except tk.TclError:
             pass
 
-        # Base font for the entire application.
-        style.configure(".", font=("Segoe UI", 10))
+        base_font = ("Segoe UI", 10)
+        style.configure(".", font=base_font)
 
         # Frames and labeled frames.
-        style.configure("TFrame", background="#020617")
-        style.configure("TLabelframe", background="#020617", foreground="#E5E7EB")
-        style.configure("TLabelframe.Label", background="#020617", foreground="#E5E7EB")
+        style.configure("TFrame", background="#F3F4F6")
+        style.configure(
+            "TLabelframe",
+            background="#F3F4F6",
+            foreground="#111827",
+            borderwidth=1,
+        )
+        style.configure(
+            "TLabelframe.Label",
+            background="#F3F4F6",
+            foreground="#111827",
+            font=("Segoe UI Semibold", 10),
+        )
 
         # Labels and buttons.
-        style.configure("TLabel", background="#020617", foreground="#E5E7EB")
+        style.configure("TLabel", background="#F3F4F6", foreground="#111827")
+
         style.configure(
             "TButton",
-            background="#0F172A",
-            foreground="#E5E7EB",
-            borderwidth=0,
+            background="#E5E7EB",
+            foreground="#111827",
             padding=6,
+            borderwidth=0,
         )
         style.map(
             "TButton",
-            background=[("active", "#1F2937")],
+            background=[("active", "#D1D5DB")],
         )
 
-        # Treeview styling for a modern dark table look.
+        # Primary buttons (used for Run / Clear).
+        style.configure(
+            "Primary.TButton",
+            background="#2563EB",
+            foreground="#FFFFFF",
+            padding=6,
+            borderwidth=0,
+        )
+        style.map(
+            "Primary.TButton",
+            background=[("active", "#1D4ED8")],
+        )
+
+        # Treeview styling for a clean, light table look.
         style.configure(
             "Treeview",
-            background="#020617",
-            foreground="#E5E7EB",
-            fieldbackground="#020617",
-            bordercolor="#1F2937",
+            background="#FFFFFF",
+            foreground="#111827",
+            fieldbackground="#FFFFFF",
+            bordercolor="#E5E7EB",
             borderwidth=1,
         )
         style.configure(
             "Treeview.Heading",
-            background="#0F172A",
-            foreground="#E5E7EB",
+            background="#F3F4F6",
+            foreground="#111827",
+            font=("Segoe UI Semibold", 9),
         )
 
         # Counter used to assign new process identifiers (P1, P2, ...).
@@ -788,8 +813,8 @@ class CPUSchedulerApp:
         self.quantum_entry.grid(row=5, column=2, padx=5, pady=3, sticky="w")
 
         # Simulation control buttons.
-        run_button = ttk.Button(frame, text="Run Simulation", command=self.run_simulation)
-        run_button.grid(row=0, column=3, padx=10, pady=3, rowspan=3, sticky="ew")
+        run_button = ttk.Button(frame, text="Run Simulation", command=self.run_simulation, style="Primary.TButton")
+ow=0, column=3, padx=10, pady=3, rowspan=3, sticky="ew")
 
         clear_button = ttk.Button(frame, text="Clear All", command=self.clear_all)
         clear_button.grid(row=3, column=3, padx=10, pady=3, rowspan=3, sticky="ew")
@@ -807,7 +832,12 @@ class CPUSchedulerApp:
         gantt_frame = ttk.LabelFrame(frame, text="Gantt Chart")
         gantt_frame.pack(fill="x", expand=False)
 
-        self.gantt_canvas = tk.Canvas(gantt_frame, height=180, bg="white")
+        self.gantt_canvas = tk.Canvas(
+            gantt_frame,
+            height=180,
+            bg="#F9FAFB",
+            highlightthickness=0,
+        )
         self.gantt_canvas.pack(fill="x", expand=True, padx=5, pady=5)
 
         # Process metrics table.
@@ -1031,7 +1061,8 @@ class CPUSchedulerApp:
                 10,
                 anchor="nw",
                 text="No schedule to display.",
-                fill="black",
+                fill="#E5E7EB",
+                font=("Segoe UI", 10),
             )
             return
 
@@ -1060,18 +1091,18 @@ class CPUSchedulerApp:
         bar_top = top_margin
         bar_bottom = bar_top + bar_height
 
-        # Color palette for processes.
+        # Color palette for processes (modern, vibrant colors).
         color_palette = [
-            "#FF9999",
-            "#99FF99",
-            "#9999FF",
-            "#FFCC99",
-            "#CC99FF",
-            "#99FFFF",
-            "#FF99CC",
-            "#CCCC99",
-            "#FFDEAD",
-            "#AFEEEE",
+            "#22C55E",  # emerald
+            "#3B82F6",  # blue
+            "#EAB308",  # amber
+            "#EC4899",  # pink
+            "#F97316",  # orange
+            "#8B5CF6",  # violet
+            "#06B6D4",  # cyan
+            "#FACC15",  # yellow
+            "#EF4444",  # red
+            "#14B8A6",  # teal
         ]
         pid_to_color: Dict[str, str] = {}
         next_color_index = 0
