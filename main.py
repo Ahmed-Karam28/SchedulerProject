@@ -699,13 +699,13 @@ class CPUSchedulerApp:
         header.grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 6), sticky="w")
 
         # Input row: arrival time, burst time, priority, and buttons.
-        ctk.CTkLabel(frame, text="Arrival Time").grid(
+        ctk.CTkLabel(frame, text="Arrival Time (ms)").grid(
             row=1, column=0, padx=12, pady=4, sticky="w"
         )
         self.arrival_entry = ctk.CTkEntry(frame, width=80)
         self.arrival_entry.grid(row=1, column=1, padx=6, pady=4, sticky="w")
 
-        ctk.CTkLabel(frame, text="Burst Time").grid(
+        ctk.CTkLabel(frame, text="Burst Time (ms)").grid(
             row=1, column=2, padx=12, pady=4, sticky="w"
         )
         self.burst_entry = ctk.CTkEntry(frame, width=80)
@@ -785,10 +785,10 @@ class CPUSchedulerApp:
         )
         self.algorithm_combobox.grid(row=0, column=1, padx=8, pady=10, sticky="w")
 
-        # Make sure internal variable matches initial selection.
+        # Make sure internal variable matches initial selection and quantum state.
         self._on_algorithm_combobox_change(self._algorithm_label_var.get())
 
-        # Time quantum controls (only used for RR, but always visible).
+        # Time quantum controls (only used for RR).
         quantum_label = ctk.CTkLabel(frame, text="Time Quantum")
         quantum_label.grid(row=0, column=2, padx=(20, 4), pady=10, sticky="e")
 
@@ -821,6 +821,12 @@ class CPUSchedulerApp:
         """Update internal algorithm key when the combobox selection changes."""
         key = self._algorithm_display_to_key.get(selected_label, "FCFS")
         self.algorithm_var.set(key)
+
+        # Enable the time quantum field only for Round Robin.
+        if key == "RR":
+            self.quantum_entry.configure(state="normal")
+        else:
+            self.quantum_entry.configure(state="disabled")
 
     def _build_output_section(self, parent: ctk.CTkFrame) -> None:
         frame = ctk.CTkFrame(parent, corner_radius=12)
@@ -895,12 +901,29 @@ class CPUSchedulerApp:
         self.results_tree.configure(yscroll=metrics_scrollbar.set)
         metrics_scrollbar.pack(side="right", fill="y", padx=(0, 4), pady=4)
 
+        # Summary cards for averages.
+        summary_frame = ctk.CTkFrame(metrics_frame, fg_color="transparent")
+        summary_frame.pack(fill="x", padx=8, pady=(0, 10))
+
+        waiting_card = ctk.CTkFrame(summary_frame, corner_radius=12)
+        waiting_card.pack(side="left", padx=(4, 8), pady=4, fill="x", expand=True)
+
+        turnaround_card = ctk.CTkFrame(summary_frame, corner_radius=12)
+        turnaround_card.pack(side="left", padx=(8, 4), pady=4, fill="x", expand=True)
+
         self.avg_waiting_label = ctk.CTkLabel(
-            metrics_frame,
+            waiting_card,
             text="Average Waiting Time: N/A",
-            font=("Segoe UI", 11),
+            font=("Segoe UI Semibold", 14),
         )
-        self.avg_waiting_label.pack(anchor="w", padx=12, pady=(0, 10))
+        self.avg_waiting_label.pack(anchor="center", padx=12, pady=10)
+
+        self.avg_turnaround_label = ctk.CTkLabel(
+            turnaround_card,
+            text="Average Turnaround Time: N/A",
+            font=("Segoe UI Semibold", 14),
+        )
+        self.avg_turnaround_label.pack(anchor="center", padx=12, pady=10)
 
     # ------------------------------------------------------------------#
     # Process list operations                                           #
@@ -1035,19 +1058,27 @@ class CPUSchedulerApp:
             messagebox.showerror("Error", str(exc))
             return
 
-        # Compute average waiting time.
+        # Compute average waiting time and turnaround time.
         if stats:
             total_waiting = sum(p["waiting_time"] for p in stats)
+            total_turnaround = sum(p["turnaround_time"] for p in stats)
             avg_waiting = total_waiting / len(stats)
+            avg_turnaround = total_turnaround / len(stats)
         else:
             avg_waiting = 0.0
+            avg_turnaround = 0.0
 
         # Update the GUI with the new schedule and metrics.
-        self._populate_results_table(stats, avg_waiting)
+        self._populate_results_table(stats, avg_waiting, avg_turnaround)
         self._draw_gantt_chart(schedule)
 
-    def _populate_results_table(self, stats: List[Dict[str, Any]], avg_waiting: float) -> None:
-        """Display per-process metrics and the overall average waiting time."""
+    def _populate_results_table(
+        self,
+        stats: List[Dict[str, Any]],
+        avg_waiting: float,
+        avg_turnaround: float,
+    ) -> None:
+        """Display per-process metrics and the overall average and per-process values."""
         # Clear existing rows.
         for item in self.results_tree.get_children():
             self.results_tree.delete(item)
@@ -1070,6 +1101,9 @@ class CPUSchedulerApp:
 
         self.avg_waiting_label.configure(
             text=f"Average Waiting Time: {avg_waiting:.2f}"
+        )
+        self.avg_turnaround_label.configure(
+            text=f"Average Turnaround Time: {avg_turnaround:.2f}"
         )
 
     def _draw_gantt_chart(self, schedule: List[ScheduleEntry]) -> None:
