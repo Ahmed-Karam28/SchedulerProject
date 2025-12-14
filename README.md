@@ -245,4 +245,9 @@ Ideas if you want to extend the project further:
 
 ## License
 
-You can add your own license here (e.g., MIT, GPL, or a custom school license).
+Copyright (c) 2025 Ahmed Karam
+
+All rights reserved. This project is provided for educational and personal use.  
+You may view, study, and modify the source code for learning purposes.  
+Redistribution or commercial use is not allowed without explicit permission  
+from the author (Ahmed Karam).
