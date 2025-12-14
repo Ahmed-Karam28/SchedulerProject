@@ -622,6 +622,10 @@ class CPUSchedulerApp:
         # Counter used to assign new process identifiers (P1, P2, ...).
         self._next_pid = 1
 
+        # Currently selected PID (for cross-highlighting) and last schedule.
+        self._selected_pid: Optional[str] = None
+        self._current_schedule: List[ScheduleEntry] = []
+
         # Configure ttk-based widgets (Treeview) to match the dark theme.
         self._configure_treeview_style()
 
@@ -772,6 +776,9 @@ class CPUSchedulerApp:
         self.process_tree.configure(yscroll=scrollbar.set)
         scrollbar.grid(row=2, column=8, sticky="ns", pady=(8, 10))
 
+        # When a process row is selected, highlight it across the UI.
+        self.process_tree.bind("<<TreeviewSelect>>", self._on_process_tree_select)
+
         # Allow the tree to expand horizontally.
         for col_index in range(8):
             frame.columnconfigure(col_index, weight=1)
@@ -829,10 +836,36 @@ class CPUSchedulerApp:
         )
         clear_button.grid(row=0, column=5, padx=(5, 10), pady=10)
 
+        # Example scenarios dropdown for quickly loading demo datasets.
+        scenario_label = ctk.CTkLabel(
+            frame,
+            text="Example Scenario",
+            font=("Segoe UI", 11),
+        )
+        scenario_label.grid(row=1, column=0, padx=12, pady=(0, 6), sticky="w")
+
+        self.scenario_var = ctk.StringVar(value="None")
+        self.scenario_combobox = ctk.CTkComboBox(
+            frame,
+            values=[
+                "None",
+                "Simple FCFS demo",
+                "Starvation example (Priority)",
+                "Preemptive vs Non-preemptive SJF",
+            ],
+            variable=self.scenario_var,
+            width=320,
+            state="readonly",
+            command=self._on_scenario_selected,
+        )
+        self.scenario_combobox.grid(
+            row=1, column=1, columnspan=3, padx=8, pady=(0, 6), sticky="w"
+        )
+
         # Small container under the Run button to stack the average labels vertically.
         averages_frame = ctk.CTkFrame(frame, fg_color="transparent")
         averages_frame.grid(
-            row=1,
+            row=2,
             column=4,
             columnspan=2,
             padx=(10, 10),
@@ -853,6 +886,17 @@ class CPUSchedulerApp:
             font=("Segoe UI Semibold", 16),
         )
         self.avg_turnaround_label.pack(anchor="e")
+
+        # Additional aggregate metrics for the current run.
+        self.extra_metrics_label = ctk.CTkLabel(
+            averages_frame,
+            text=(
+                "CPU Utilization: N/A  |  Throughput: N/A  |  "
+                "Min Waiting: N/A  |  Max Waiting: N/A"
+            ),
+            font=("Segoe UI", 11),
+        )
+        self.extra_metrics_label.pack(anchor="e", pady=(4, 0))
 
         frame.columnconfigure(1, weight=1)
 
@@ -1032,9 +1076,17 @@ class CPUSchedulerApp:
         self.gantt_canvas.delete("all")
         self.avg_waiting_label.configure(text="Average Waiting Time: N/A")
         self.avg_turnaround_label.configure(text="Average Turnaround Time: N/A")
+        if hasattr(self, "extra_metrics_label"):
+            self.extra_metrics_label.configure(
+                text="CPU Utilization: N/A  |  Throughput: N/A  |  Min Waiting: N/A  |  Max Waiting: N/A"
+            )
 
         # Reset PID counter so new processes start again at P1.
         self._next_pid = 1
+
+        # Clear selection-related state.
+        self._selected_pid = None
+        self._current_schedule = []
 
         # Re-apply striping (no rows, but keeps things consistent if extended later).
         self._restyle_process_tree_rows()
@@ -1048,6 +1100,100 @@ class CPUSchedulerApp:
         for index, item in enumerate(self.process_tree.get_children()):
             tag = "evenrow" if index % 2 == 0 else "oddrow"
             self.process_tree.item(item, tags=(tag,))
+
+    # ------------------------------------------------------------------#
+    # Selection handling + scenarios                                    #
+    # ------------------------------------------------------------------#
+
+    def _on_process_tree_select(self, event: tk.Event) -> None:
+        """
+        When a process is selected in the input table, highlight the same PID
+        in the metrics table (if present) and emphasize its segments in the
+        Gantt chart.
+        """
+        selection = self.process_tree.selection()
+        if not selection:
+            self._selected_pid = None
+            # Clear metrics table selection.
+            self.results_tree.selection_remove(*self.results_tree.selection())
+            # Redraw Gantt chart without emphasis if we have a schedule.
+            if self._current_schedule:
+                self._draw_gantt_chart(self._current_schedule)
+            return
+
+        item_id = selection[0]
+        values = self.process_tree.item(item_id, "values")
+        if not values:
+            return
+
+        pid = str(values[0])
+        self._selected_pid = pid
+
+        # Highlight the corresponding row in the metrics table.
+        self.results_tree.selection_remove(*self.results_tree.selection())
+        for metrics_item in self.results_tree.get_children():
+            m_values = self.results_tree.item(metrics_item, "values")
+            if m_values and str(m_values[0]) == pid:
+                self.results_tree.selection_set(metrics_item)
+                self.results_tree.see(metrics_item)
+                break
+
+        # Redraw Gantt chart with emphasized segments for this PID.
+        if self._current_schedule:
+            self._draw_gantt_chart(self._current_schedule)
+
+    def _on_scenario_selected(self, selected_label: str) -> None:
+        """
+        Load one of the predefined example scenarios into the process input
+        table. This clears the current processes and results.
+        """
+        if selected_label == "None":
+            return
+
+        # Clear existing simulation state.
+        self.clear_all()
+
+        # Define scenarios as lists of (arrival, burst, priority).
+        scenarios = {
+            "Simple FCFS demo": [
+                (0, 5, 2),
+                (2, 3, 1),
+                (4, 1, 3),
+                (6, 7, 2),
+            ],
+            "Starvation example (Priority)": [
+                # One low-priority job arrives first, many high-priority jobs arrive later.
+                (0, 20, 5),  # P1, low priority, long job
+                (2, 3, 1),   # P2, high priority
+                (4, 4, 1),   # P3, high priority
+                (6, 2, 1),   # P4, high priority
+                (8, 1, 1),   # P5, high priority
+            ],
+            "Preemptive vs Non-preemptive SJF": [
+                (0, 8, 1),
+                (1, 4, 1),
+                (2, 2, 1),
+                (3, 1, 1),
+            ],
+        }
+
+        processes = scenarios.get(selected_label)
+        if not processes:
+            return
+
+        for arrival, burst, priority in processes:
+            pid = f"P{self._next_pid}"
+            self._next_pid += 1
+
+            row_index = len(self.process_tree.get_children())
+            tag = "evenrow" if row_index % 2 == 0 else "oddrow"
+
+            self.process_tree.insert(
+                "",
+                "end",
+                values=(pid, arrival, burst, priority),
+                tags=(tag,),
+            )
 
     def _get_processes_from_tree(self) -> List[Process]:
         """
@@ -1115,13 +1261,42 @@ class CPUSchedulerApp:
             total_turnaround = sum(p["turnaround_time"] for p in stats)
             avg_waiting = total_waiting / len(stats)
             avg_turnaround = total_turnaround / len(stats)
+            min_waiting = min(p["waiting_time"] for p in stats)
+            max_waiting = max(p["waiting_time"] for p in stats)
         else:
             avg_waiting = 0.0
             avg_turnaround = 0.0
+            min_waiting = 0.0
+            max_waiting = 0.0
+
+        # Compute CPU utilization and throughput from the schedule.
+        if schedule:
+            total_time = max(entry["end"] for entry in schedule)
+            busy_time = sum(
+                entry["end"] - entry["start"]
+                for entry in schedule
+                if entry["pid"] is not None
+            )
+            cpu_utilization = (busy_time / total_time) if total_time > 0 else 0.0
+            throughput = (len(stats) / total_time) if total_time > 0 else 0.0
+        else:
+            cpu_utilization = 0.0
+            throughput = 0.0
 
         # Update the GUI with the new schedule and metrics.
         self._populate_results_table(stats, avg_waiting, avg_turnaround)
         self._draw_gantt_chart(schedule)
+
+        # Update the extra aggregate metrics label.
+        if hasattr(self, "extra_metrics_label"):
+            self.extra_metrics_label.configure(
+                text=(
+                    f"CPU Utilization: {cpu_utilization * 100:.2f}%  |  "
+                    f"Throughput: {throughput:.3f} proc/unit  |  "
+                    f"Min Waiting: {min_waiting:.2f}  |  "
+                    f"Max Waiting: {max_waiting:.2f}"
+                )
+            )
 
     def _populate_results_table(
         self,
@@ -1167,7 +1342,13 @@ class CPUSchedulerApp:
         Each schedule entry is drawn as a rectangle whose width is
         proportional to its duration. Different processes are shown in
         different colors; idle time (no process running) is shown in gray.
+
+        The currently selected PID (if any) is emphasized with a thicker
+        border and slightly brighter rectangle.
         """
+        # Remember the last schedule so selection changes can trigger a redraw.
+        self._current_schedule = list(schedule)
+
         self.gantt_canvas.delete("all")
 
         if not schedule:
