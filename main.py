@@ -981,18 +981,19 @@ class CPUSchedulerApp:
         )
         algo_label.grid(row=0, column=0, padx=12, pady=10, sticky="w")
 
-        # Combobox for algorithm selection.
-        self.algorithm_combobox = ctk.CTkComboBox(
+        # Dropdown for algorithm selection.
+        # Using CTkOptionMenu instead of CTkComboBox for more reliable rendering
+        # across customtkinter versions and to make the current algorithm clearly visible.
+        self.algorithm_optionmenu = ctk.CTkOptionMenu(
             frame,
             values=list(self._algorithm_display_to_key.keys()),
             variable=self._algorithm_label_var,
             width=320,
-            state="readonly",
             command=self._on_algorithm_combobox_change,
         )
-        self.algorithm_combobox.grid(row=0, column=1, padx=8, pady=10, sticky="w")
+        self.algorithm_optionmenu.grid(row=0, column=1, padx=8, pady=10, sticky="w")
         _add_tooltip(
-            self.algorithm_combobox,
+            self.algorithm_optionmenu,
             "Choose the CPU scheduling algorithm.\n"
             "Preemptive variants: SRTF, Preemptive Priority, Round Robin.",
         )
@@ -1156,6 +1157,9 @@ class CPUSchedulerApp:
             self._playback_time = clamped
             if hasattr(self, "playback_time_label"):
                 self.playback_time_label.configure(text=f"Time: t = {clamped}")
+            # Redraw the Gantt chart so the playback cursor moves visually.
+            if self._current_schedule:
+                self._draw_gantt_chart(self._current_schedule)
 
         def playback_step_back() -> None:
             if not self._current_schedule:
@@ -2078,6 +2082,33 @@ class CPUSchedulerApp:
             final_x,
             bar_bottom + 7,
             text=str(total_time),
+            anchor="n",
+            font=tick_font,
+            fill="#D1D5DB",
+        )
+
+        # If a playback time is set, draw a vertical cursor line at that time
+        # so the playback controls have a clear visual effect.
+        if self._playback_time is not None:
+            t = self._playback_time
+            if 0 <= t <= total_time:
+                cursor_x = left_margin + t * time_scale
+                self.gantt_canvas.create_line(
+                    cursor_x,
+                    bar_top - 10,
+                    cursor_x,
+                    bar_bottom + 10,
+                    fill="#F97316",
+                    width=2,
+                )
+                self.gantt_canvas.create_text(
+                    cursor_x,
+                    bar_top - 12,
+                    text=f"t={t}",
+                    anchor="s",
+                    font=tick_font,
+                    fill="#FACC15",
+                ),
             anchor="n",
             font=tick_font,
             fill="#D1D5DB",
