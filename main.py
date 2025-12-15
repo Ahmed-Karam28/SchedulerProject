@@ -663,10 +663,12 @@ class CPUSchedulerApp:
             "Priority Scheduling (preemptive)": "PRIORITY_PREEMPTIVE",
             "Round Robin (RR)": "RR",
         }
-        self._algorithm_label_var = ctk.StringVar(             value="First-Come, First-Served (FCFS)"         )
-        # Appearance modece mode (Dark / Light) for the UI.
-        self._appearance_var = ctk.StringVar(value="Dark")"
+        self._algorithm_label_var = ctk.StringVar(
+            value="First-Come, First-Served (FCFS)"
         )
+
+        # Appearance mode (Dark / Light) for the UI.
+        self._appearance_var = ctk.StringVar(value="Dark")
 
         # Counter used to assign new process identifiers (P1, P2, ...).
         self._next_pid = 1
@@ -678,10 +680,10 @@ class CPUSchedulerApp:
         self._current_schedule: List[ScheduleEntry] = []
         self._playback_time: Optional[int] = None
         self._playback_running: bool = False
-        self._playback_job_id: Optional[str] = None
+        self._playback_job_id: Optional[int] = None
 
         # Mapping from comparison table rows to algorithm keys.
-        self._comparison_algorithm_for_item
+        self._comparison_algorithm_for_item: Dict[str, str] = {}
 
         # Configure ttk-based widgets (Treeview) to match the dark theme.
         self._configure_treeview_style()
@@ -1427,6 +1429,66 @@ class CPUSchedulerApp:
 
         # Re-apply striping (no rows, but keeps things consistent if extended later).
         self._restyle_process_tree_rows()
+
+    # ------------------------------------------------------------------#
+    # Export helpers                                                    #
+    # ------------------------------------------------------------------#
+
+    def _export_metrics_csv(self) -> None:
+        """Export the current process metrics table to a CSV file."""
+        if not self.results_tree.get_children():
+            messagebox.showinfo("No data", "No metrics to export yet.")
+            return
+
+        path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            title="Save metrics as CSV",
+        )
+        if not path:
+            return
+
+        headers = [
+            "PID",
+            "Arrival",
+            "Burst",
+            "Priority",
+            "Completion",
+            "Turnaround",
+            "Waiting",
+        ]
+        try:
+            import csv
+
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                for item in self.results_tree.get_children():
+                    writer.writerow(self.results_tree.item(item, "values"))
+        except OSError as exc:
+            messagebox.showerror("Error", f"Failed to save CSV file:\n{exc}")
+
+    def _export_gantt_chart(self) -> None:
+        """Save the current Gantt chart as a PostScript file."""
+        if not self._current_schedule:
+            messagebox.showinfo(
+                "No schedule",
+                "Run a simulation before saving the Gantt chart.",
+            )
+            return
+
+        path = filedialog.asksaveasfilename(
+            defaultextension=".ps",
+            filetypes=[("PostScript files", "*.ps"), ("All files", "*.*")],
+            title="Save Gantt chart",
+        )
+        if not path:
+            return
+
+        try:
+            self.gantt_canvas.postscript(file=path)
+        except tk.TclError as exc:
+            messagebox.showerror("Error", f"Failed to export chart:\n{exc}")
 
     # ------------------------------------------------------------------#
     # Simulation + visualization                                       #
