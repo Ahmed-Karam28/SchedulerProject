@@ -24,7 +24,7 @@ style so that it can be used as part of an OS course report.
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import customtkinter as ctk
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
@@ -578,6 +578,54 @@ def round_robin_scheduling(
 
 
 # ---------------------------------------------------------------------------
+# Simple tooltip helper for Tk / customtkinter widgets
+# ---------------------------------------------------------------------------
+
+
+class _ToolTip:
+    """Minimal tooltip implementation for Tk / customtkinter widgets."""
+
+    def __init__(self, widget: tk.Widget, text: str) -> None:
+        self.widget = widget
+        self.text = text
+        self._tip_window: Optional[tk.Toplevel] = None
+        widget.bind("<Enter>", self._on_enter)
+        widget.bind("<Leave>", self._on_leave)
+
+    def _on_enter(self, _event: tk.Event) -> None:
+        if self._tip_window is not None:
+            return
+        x = self.widget.winfo_rootx() + 20
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
+        self._tip_window = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(
+            tw,
+            text=self.text,
+            justify="left",
+            background="#111827",
+            foreground="#F9FAFB",
+            relief="solid",
+            borderwidth=1,
+            font=("Segoe UI", 9),
+            padx=4,
+            pady=2,
+        )
+        label.pack(ipadx=1)
+
+    def _on_leave(self, _event: tk.Event) -> None:
+        if self._tip_window is not None:
+            self._tip_window.destroy()
+            self._tip_window = None
+
+
+def _add_tooltip(widget: tk.Widget, text: str) -> None:
+    """Attach a tooltip with the given text to a widget."""
+    _ToolTip(widget, text)
+
+
+# ---------------------------------------------------------------------------
 # GUI Application
 # ---------------------------------------------------------------------------
 
@@ -619,12 +667,24 @@ class CPUSchedulerApp:
             value="First-Come, First-Served (FCFS)"
         )
 
+        # Appearance mode (Dark / Light) for the UI.
+        self._appearance_var = ctk.StringVar(value="Dark")"
+        )
+
         # Counter used to assign new process identifiers (P1, P2, ...).
         self._next_pid = 1
 
-        # Currently selected PID (for cross-highlighting) and last schedule.
+        # Currently selected PID (for cross-highlighting).
         self._selected_pid: Optional[str] = None
+
+        # Last computed schedule and playback state for the Gantt chart.
         self._current_schedule: List[ScheduleEntry] = []
+        self._playback_time: Optional[int] = None
+        self._playback_running: bool = False
+        self._playback_job_id: Optional[str] = None
+
+        # Mapping from comparison table rows to algorithm keys.
+        self._comparison_algorithm_for_item
 
         # Configure ttk-based widgets (Treeview) to match the dark theme.
         self._configure_treeview_style()
@@ -660,6 +720,105 @@ class CPUSchedulerApp:
             font=("Segoe UI Semibold", 9),
         )
 
+    def _on_theme_changed(self, mode: str) -> None:
+        """
+        Callback when the Dark/Light segmented button is changed.
+
+        Updates the global appearance mode and reapplies Treeview styling.
+        """
+        # customtkinter expects lowercase "dark"/"light".
+        ctk.set_appearance_mode(mode.lower())
+        # Reapply Treeview styling so headers / rows match the new theme.
+        self._configure_treeview_style()
+
+    def _show_help_window(self) -> None:
+        """Open a small help window explaining the algorithms and metrics."""
+        # Avoid opening multiple help windows.
+        if hasattr(self, "_help_window") and self._help_window is not None:
+            try:
+                self._help_window.lift()
+                return
+            except tk.TclError:
+                self._help_window = None
+
+        help_win = self._help_window = ctk.CTkToplevel(self.root)
+        help_win.title("CPU Scheduling – Theory Overview")
+        help_win.geometry("700x500")
+
+        container = ctk.CTkScrollableFrame(help_win, corner_radius=0)
+        container.pack(fill="both", expand=True, padx=12, pady=12)
+
+        title = ctk.CTkLabel(
+            container,
+            text="CPU Scheduling Algorithms – Overview",
+            font=("Segoe UI Semibold", 18),
+        )
+        title.pack(anchor="w", pady=(0, 8))
+
+        text_blocks = [
+            (
+                "FCFS (First-Come, First-Served)",
+                "Non-preemptive. Processes are served strictly in order of arrival.\n"
+                "Simple to implement but can suffer from the 'convoy effect' when a "
+                "long job blocks many short ones.",
+            ),
+            (
+                "SJF (Shortest Job First, non-preemptive)",
+                "Among the ready processes, always run the one with the smallest "
+                "burst time. Minimizes average waiting time in theory, but can "
+                "cause starvation of long jobs.",
+            ),
+            (
+                "SRTF (Shortest Remaining Time First, preemptive SJF)",
+                "Preemptive version of SJF. At every time unit, runs the process "
+                "with the smallest remaining time. New shorter jobs can preempt "
+                "the current job.",
+            ),
+            (
+                "Priority Scheduling (non-preemptive / preemptive)",
+                "Each process has a priority (lower number = higher priority).\n"
+                "The highest-priority job runs first. Can cause starvation of "
+                "low-priority jobs if high-priority jobs keep arriving.",
+            ),
+            (
+                "Round Robin (RR)",
+                "Preemptive, time-sliced scheduling. Each process receives up to "
+                "a fixed time quantum, then moves to the back of the ready queue.\n"
+                "Good for time-sharing systems; behavior depends heavily on the "
+                "chosen quantum.",
+            ),
+            (
+                "Metrics",
+                "Turnaround Time T = Completion - Arrival.\n"
+                "Waiting Time   W = Turnaround - Burst.\n"
+                "CPU Utilization = BusyTime / TotalTime.\n"
+                "Throughput      = NumberOfProcesses / TotalTime.",
+            ),
+        ]
+
+        for heading, body in text_blocks:
+            lbl_h = ctk.CTkLabel(
+                container,
+                text=heading,
+                font=("Segoe UI Semibold", 14),
+            )
+            lbl_h.pack(anchor="w", pady=(10, 2))
+            lbl_b = ctk.CTkLabel(
+                container,
+                text=body,
+                font=("Segoe UI", 11),
+                justify="left",
+            )
+            lbl_b.pack(anchor="w")
+
+        close_btn = ctk.CTkButton(
+            container,
+            text="Close",
+            width=100,
+            command=help_win.destroy,
+        )
+        close_btn.pack(anchor="e", pady=(16, 0))
+
     # ------------------------------------------------------------------#
     # UI construction                                                   #
     # ------------------------------------------------------------------#
@@ -679,18 +838,42 @@ class CPUSchedulerApp:
         header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
         header_frame.pack(fill="x", pady=(0, 10))
 
+        title_left = ctk.CTkFrame(header_frame, fg_color="transparent")
+        title_left.pack(side="left", fill="x", expand=True)
+
         title_label = ctk.CTkLabel(
-            header_frame,
+            title_left,
             text="CPU Scheduling Simulator",
             font=("Segoe UI Semibold", 22),
         )
         subtitle_label = ctk.CTkLabel(
-            header_frame,
+            title_left,
             text="FCFS • SJF • SRTF • Priority • Round Robin",
             font=("Segoe UI", 12),
         )
         title_label.pack(anchor="w")
         subtitle_label.pack(anchor="w")
+
+        # Right side: theme toggle and help button.
+        title_right = ctk.CTkFrame(header_frame, fg_color="transparent")
+        title_right.pack(side="right")
+
+        theme_toggle = ctk.CTkSegmentedButton(
+            title_right,
+            values=["Dark", "Light"],
+            variable=self._appearance_var,
+            width=140,
+            command=self._on_theme_changed,
+        )
+        theme_toggle.pack(side="right", padx=(0, 8))
+
+        help_button = ctk.CTkButton(
+            title_right,
+            text="Help / Theory",
+            width=110,
+            command=self._show_help_window,
+        )
+        help_button.pack(side="right", padx=(0, 8))
 
         # Process input, algorithm selection, and output.
         self._build_process_input_section(main_frame)
@@ -709,22 +892,26 @@ class CPUSchedulerApp:
         header.grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 6), sticky="w")
 
         # Input row: arrival time, burst time, priority, and buttons.
-        ctk.CTkLabel(frame, text="Arrival Time (ms)").grid(
-            row=1, column=0, padx=12, pady=4, sticky="w"
-        )
+        arrival_label = ctk.CTkLabel(frame, text="Arrival Time (ms)")
+        arrival_label.grid(row=1, column=0, padx=12, pady=4, sticky="w")
         self.arrival_entry = ctk.CTkEntry(frame, width=80)
         self.arrival_entry.grid(row=1, column=1, padx=6, pady=4, sticky="w")
 
-        ctk.CTkLabel(frame, text="Burst Time (ms)").grid(
-            row=1, column=2, padx=12, pady=4, sticky="w"
-        )
+        burst_label = ctk.CTkLabel(frame, text="Burst Time (ms)")
+        burst_label.grid(row=1, column=2, padx=12, pady=4, sticky="w")
         self.burst_entry = ctk.CTkEntry(frame, width=80)
         self.burst_entry.grid(row=1, column=3, padx=6, pady=4, sticky="w")
 
-        ctk.CTkLabel(frame, text="Priority\n(lower = higher)").grid(
-            row=1, column=4, padx=12, pady=4, sticky="w"
-        )
+        priority_label = ctk.CTkLabel(frame, text="Priority\n(lower = higher)")
+        priority_label.grid(row=1, column=4, padx=12, pady=4, sticky="w")
         self.priority_entry = ctk.CTkEntry(frame, width=80)
+
+        # Tooltips with quick hints.
+        _add_tooltip(
+            priority_label,
+            "Lower numeric value = higher priority.\n"
+            "Example: priority 1 runs before priority 3.",
+        )
         self.priority_entry.grid(row=1, column=5, padx=6, pady=4, sticky="w")
 
         add_button = ctk.CTkButton(
@@ -805,6 +992,11 @@ class CPUSchedulerApp:
             command=self._on_algorithm_combobox_change,
         )
         self.algorithm_combobox.grid(row=0, column=1, padx=8, pady=10, sticky="w")
+        _add_tooltip(
+            self.algorithm_combobox,
+            "Choose the CPU scheduling algorithm.\n"
+            "Preemptive variants: SRTF, Preemptive Priority, Round Robin.",
+        )
 
         # Time quantum controls (only used for RR).
         quantum_label = ctk.CTkLabel(frame, text="Time Quantum")
@@ -813,6 +1005,11 @@ class CPUSchedulerApp:
         self.quantum_entry = ctk.CTkEntry(frame, width=80)
         self.quantum_entry.insert(0, "2")
         self.quantum_entry.grid(row=0, column=3, padx=(0, 10), pady=10, sticky="w")
+        _add_tooltip(
+            quantum_label,
+            "Round Robin only:\n"
+            "Each process gets up to this many time units per turn.",
+        )
 
         # Make sure internal variable matches initial selection and quantum state.
         self._on_algorithm_combobox_change(self._algorithm_label_var.get())
@@ -826,6 +1023,14 @@ class CPUSchedulerApp:
         )
         run_button.grid(row=0, column=4, padx=(10, 5), pady=10)
 
+        compare_button = ctk.CTkButton(
+            frame,
+            text="Compare Algorithms",
+            command=self.run_comparison,
+            width=170,
+        )
+        compare_button.grid(row=0, column=5, padx=(5, 5), pady=10)
+
         clear_button = ctk.CTkButton(
             frame,
             text="Clear All",
@@ -834,7 +1039,7 @@ class CPUSchedulerApp:
             fg_color="#1F2937",
             hover_color="#111827",
         )
-        clear_button.grid(row=0, column=5, padx=(5, 10), pady=10)
+        clear_button.grid(row=0, column=6, padx=(5, 10), pady=10)
 
         # Example scenarios dropdown for quickly loading demo datasets.
         scenario_label = ctk.CTkLabel(
@@ -860,6 +1065,11 @@ class CPUSchedulerApp:
         )
         self.scenario_combobox.grid(
             row=1, column=1, columnspan=3, padx=8, pady=(0, 6), sticky="w"
+        )
+        _add_tooltip(
+            self.scenario_combobox,
+            "Load a predefined set of processes that illustrates\n"
+            "a particular scheduling behavior (e.g., starvation).",
         )
 
         # Small container under the Run button to stack the average labels vertically.
@@ -934,6 +1144,49 @@ class CPUSchedulerApp:
         )
         self.gantt_canvas.pack(fill="x", padx=12, pady=(0, 12))
 
+        # Playback controls for stepping through the schedule in time.
+        playback_frame = ctk.CTkFrame(gantt_frame, fg_color="transparent")
+        playback_frame.pack(fill="x", padx=12, pady=(0, 10))
+
+        step_back_btn = ctk.CTkButton(
+            playback_frame,
+            text="⏮ Step Back",
+            width=110,
+            command=self._playback_step_back,
+        )
+        step_back_btn.pack(side="left", padx=(0, 6))
+
+        step_forward_btn = ctk.CTkButton(
+            playback_frame,
+            text="⏭ Step Forward",
+            width=120,
+            command=self._playback_step_forward,
+        )
+        step_forward_btn.pack(side="left", padx=(0, 6))
+
+        play_btn = ctk.CTkButton(
+            playback_frame,
+            text="▶ Play",
+            width=80,
+            command=self._playback_start,
+        )
+        play_btn.pack(side="left", padx=(12, 6))
+
+        pause_btn = ctk.CTkButton(
+            playback_frame,
+            text="⏸ Pause",
+            width=90,
+            command=self._playback_pause,
+        )
+        pause_btn.pack(side="left", padx=(0, 6))
+
+        self.playback_time_label = ctk.CTkLabel(
+            playback_frame,
+            text="Time: t = -",
+            font=("Segoe UI", 11),
+        )
+        self.playback_time_label.pack(side="right")
+
         # Process metrics section.
         metrics_frame = ctk.CTkFrame(frame, corner_radius=12)
         metrics_frame.pack(fill="both", expand=True, padx=10, pady=(10, 0))
@@ -997,6 +1250,83 @@ class CPUSchedulerApp:
         )
         self.results_tree.configure(yscroll=metrics_scrollbar.set)
         metrics_scrollbar.pack(side="right", fill="y", padx=(0, 4), pady=4)
+
+        # Export controls under the metrics table.
+        export_frame = ctk.CTkFrame(metrics_frame, fg_color="transparent")
+        export_frame.pack(fill="x", padx=12, pady=(0, 10))
+
+        export_csv_btn = ctk.CTkButton(
+            export_frame,
+            text="Export Metrics (CSV)",
+            width=170,
+            command=self._export_metrics_csv,
+        )
+        export_csv_btn.pack(side="left", padx=(0, 8))
+
+        export_chart_btn = ctk.CTkButton(
+            export_frame,
+            text="Save Gantt Chart (PS)",
+            width=190,
+            command=self._export_gantt_chart,
+        )
+        export_chart_btn.pack(side="left", padx=(0, 8))
+
+        # Algorithm comparison section.
+        comparison_frame = ctk.CTkFrame(frame, corner_radius=12)
+        comparison_frame.pack(fill="both", expand=True, padx=10, pady=(10, 10))
+
+        comparison_label = ctk.CTkLabel(
+            comparison_frame,
+            text="Algorithm Comparison",
+            font=("Segoe UI Semibold", 13),
+        )
+        comparison_label.pack(anchor="w", padx=12, pady=(10, 4))
+
+        comparison_container = ctk.CTkFrame(comparison_frame, fg_color="transparent")
+        comparison_container.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+        comparison_columns = (
+            "algorithm",
+            "avg_waiting",
+            "avg_turnaround",
+            "cpu_util",
+            "throughput",
+        )
+        self.comparison_tree = ttk.Treeview(
+            comparison_container,
+            columns=comparison_columns,
+            show="headings",
+            height=6,
+        )
+
+        comparison_headings = [
+            ("algorithm", "Algorithm"),
+            ("avg_waiting", "Avg Waiting"),
+            ("avg_turnaround", "Avg Turnaround"),
+            ("cpu_util", "CPU Util (%)"),
+            ("throughput", "Throughput"),
+        ]
+        for col, label in comparison_headings:
+            self.comparison_tree.heading(col, text=label)
+            self.comparison_tree.column(col, anchor="center", width=120, stretch=True)
+
+        self.comparison_tree.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(4, 0),
+            pady=4,
+        )
+
+        comparison_scrollbar = ttk.Scrollbar(
+            comparison_container,
+            orient="vertical",
+            command=self.comparison_tree.yview,
+        )
+        self.comparison_tree.configure(yscroll=comparison_scrollbar.set)
+        comparison_scrollbar.pack(side="right", fill="y", padx=(0, 4), pady=4)
+
+        self.comparison_tree.bind("<<TreeviewSelect>>", self._on_comparison_select)
 
     # ------------------------------------------------------------------#
     # Process list operations                                           #
@@ -1066,12 +1396,17 @@ class CPUSchedulerApp:
         self._restyle_process_tree_rows()
 
     def clear_all(self) -> None:
-        """Clear all processes, results, and the Gantt chart."""
+        """Clear all processes, results, comparison data, and the Gantt chart."""
         for item in self.process_tree.get_children():
             self.process_tree.delete(item)
 
         for item in self.results_tree.get_children():
             self.results_tree.delete(item)
+
+        # Clear comparison table if it exists.
+        if hasattr(self, "comparison_tree"):
+            for item in self.comparison_tree.get_children():
+                self.comparison_tree.delete(item)
 
         self.gantt_canvas.delete("all")
         self.avg_waiting_label.configure(text="Average Waiting Time: N/A")
@@ -1084,9 +1419,14 @@ class CPUSchedulerApp:
         # Reset PID counter so new processes start again at P1.
         self._next_pid = 1
 
-        # Clear selection-related state.
+        # Clear selection-related and playback state.
         self._selected_pid = None
         self._current_schedule = []
+        self._playback_time = None
+        self._playback_running = False
+        self._playback_job_id = None
+        if hasattr(self, "playback_time_label"):
+            self.playback_time_label.configure(text="Time: t = -")
 
         # Re-apply striping (no rows, but keeps things consistent if extended later).
         self._restyle_process_tree_rows()
@@ -1215,47 +1555,36 @@ class CPUSchedulerApp:
             )
         return processes
 
-    def run_simulation(self) -> None:
-        """Run the selected scheduling algorithm and update the GUI."""
-        processes = self._get_processes_from_tree()
-        if not processes:
-            messagebox.showerror("No processes", "Please add at least one process before running the simulation.")
-            return
+    # ------------------------------------------------------------------#
+    # Core scheduling helpers                                           #
+    # ------------------------------------------------------------------#
 
-        algorithm = self.algorithm_var.get()
-        try:
-            if algorithm == "FCFS":
-                schedule, stats = fcfs_scheduling(processes)
-            elif algorithm == "SJF":
-                schedule, stats = sjf_scheduling(processes)
-            elif algorithm == "SJF_PREEMPTIVE":
-                schedule, stats = sjf_preemptive_scheduling(processes)
-            elif algorithm == "PRIORITY":
-                schedule, stats = priority_scheduling(processes)
-            elif algorithm == "PRIORITY_PREEMPTIVE":
-                schedule, stats = priority_preemptive_scheduling(processes)
-            elif algorithm == "RR":
-                quantum_text = self.quantum_entry.get().strip()
-                if not quantum_text:
-                    messagebox.showerror("Invalid quantum", "Please enter a time quantum for Round Robin.")
-                    return
+    def _run_algorithm(
+        self, algorithm: str, processes: List[Process], quantum: Optional[int] = None
+    ) -> Tuple[List[ScheduleEntry], List[Dict[str, Any]]]:
+        """Run a scheduling algorithm by key and return (schedule, stats)."""
+        if algorithm == "FCFS":
+            return fcfs_scheduling(processes)
+        if algorithm == "SJF":
+            return sjf_scheduling(processes)
+        if algorithm == "SJF_PREEMPTIVE":
+            return sjf_preemptive_scheduling(processes)
+        if algorithm == "PRIORITY":
+            return priority_scheduling(processes)
+        if algorithm == "PRIORITY_PREEMPTIVE":
+            return priority_preemptive_scheduling(processes)
+        if algorithm == "RR":
+            if quantum is None:
+                raise ValueError("Time quantum is required for Round Robin.")
+            return round_robin_scheduling(processes, quantum)
+        raise ValueError(f"Unsupported algorithm key: {algorithm}")
 
-                try:
-                    quantum = int(quantum_text)
-                except ValueError:
-                    messagebox.showerror("Invalid quantum", "Time quantum must be a positive integer.")
-                    return
-
-                schedule, stats = round_robin_scheduling(processes, quantum)
-            else:
-                messagebox.showerror("Unknown algorithm", f"Unsupported algorithm: {algorithm}")
-                return
-        except ValueError as exc:
-            # For example, invalid quantum passed into round_robin_scheduling.
-            messagebox.showerror("Error", str(exc))
-            return
-
-        # Compute average waiting time and turnaround time.
+    def _compute_aggregates(
+        self,
+        schedule: List[ScheduleEntry],
+        stats: List[Dict[str, Any]],
+    ) -> Dict[str, float]:
+        """Compute aggregate metrics from a schedule and per-process stats."""
         if stats:
             total_waiting = sum(p["waiting_time"] for p in stats)
             total_turnaround = sum(p["turnaround_time"] for p in stats)
@@ -1269,7 +1598,6 @@ class CPUSchedulerApp:
             min_waiting = 0.0
             max_waiting = 0.0
 
-        # Compute CPU utilization and throughput from the schedule.
         if schedule:
             total_time = max(entry["end"] for entry in schedule)
             busy_time = sum(
@@ -1283,20 +1611,188 @@ class CPUSchedulerApp:
             cpu_utilization = 0.0
             throughput = 0.0
 
+        return {
+            "avg_waiting": avg_waiting,
+            "avg_turnaround": avg_turnaround,
+            "min_waiting": min_waiting,
+            "max_waiting": max_waiting,
+            "cpu_utilization": cpu_utilization,
+            "throughput": throughput,
+        }
+
+    def run_simulation(self) -> None:
+        """Run the selected scheduling algorithm and update the GUI."""
+        processes = self._get_processes_from_tree()
+        if not processes:
+            messagebox.showerror(
+                "No processes",
+                "Please add at least one process before running the simulation.",
+            )
+            return
+
+        algorithm = self.algorithm_var.get()
+        quantum: Optional[int] = None
+
+        if algorithm == "RR":
+            quantum_text = self.quantum_entry.get().strip()
+            if not quantum_text:
+                messagebox.showerror(
+                    "Invalid quantum", "Please enter a time quantum for Round Robin."
+                )
+                return
+            try:
+                quantum = int(quantum_text)
+            except ValueError:
+                messagebox.showerror(
+                    "Invalid quantum", "Time quantum must be a positive integer."
+                )
+                return
+
+        try:
+            schedule, stats = self._run_algorithm(algorithm, processes, quantum)
+        except ValueError as exc:
+            messagebox.showerror("Error", str(exc))
+            return
+
+        aggregates = self._compute_aggregates(schedule, stats)
+
         # Update the GUI with the new schedule and metrics.
-        self._populate_results_table(stats, avg_waiting, avg_turnaround)
+        self._populate_results_table(
+            stats, aggregates["avg_waiting"], aggregates["avg_turnaround"]
+        )
         self._draw_gantt_chart(schedule)
 
         # Update the extra aggregate metrics label.
         if hasattr(self, "extra_metrics_label"):
             self.extra_metrics_label.configure(
                 text=(
-                    f"CPU Utilization: {cpu_utilization * 100:.2f}%  |  "
-                    f"Throughput: {throughput:.3f} proc/unit  |  "
-                    f"Min Waiting: {min_waiting:.2f}  |  "
-                    f"Max Waiting: {max_waiting:.2f}"
+                    f"CPU Utilization: {aggregates['cpu_utilization'] * 100:.2f}%  |  "
+                    f"Throughput: {aggregates['throughput']:.3f} proc/unit  |  "
+                    f"Min Waiting: {aggregates['min_waiting']:.2f}  |  "
+                    f"Max Waiting: {aggregates['max_waiting']:.2f}"
                 )
             )
+
+        # Initialize playback at time 0 and update label.
+        self._playback_time = 0
+        if hasattr(self, "playback_time_label"):
+            self.playback_time_label.configure(text="Time: t = 0")
+
+    def run_comparison(self) -> None:
+        """Run all algorithms on the current process set and populate the comparison table."""
+        processes = self._get_processes_from_tree()
+        if not processes:
+            messagebox.showerror(
+                "No processes",
+                "Please add at least one process before running the comparison.",
+            )
+            return
+
+        # Determine quantum to use for RR in comparison.
+        quantum: Optional[int] = None
+        quantum_text = self.quantum_entry.get().strip()
+        if quantum_text:
+            try:
+                quantum = int(quantum_text)
+            except ValueError:
+                messagebox.showerror(
+                    "Invalid quantum",
+                    "Time quantum must be a positive integer for Round Robin.",
+                )
+                return
+
+        # Clear old comparison rows.
+        self._comparison_algorithm_for_item.clear()
+        for item in self.comparison_tree.get_children():
+            self.comparison_tree.delete(item)
+
+        # Use the mapping of labels -> keys to decide which algorithms to compare.
+        for label, key in self._algorithm_display_to_key.items():
+            try:
+                schedule, stats = self._run_algorithm(key, processes, quantum)
+            except ValueError:
+                # Skip RR if quantum is invalid / missing.
+                if key == "RR":
+                    continue
+                raise
+
+            aggregates = self._compute_aggregates(schedule, stats)
+
+            item_id = self.comparison_tree.insert(
+                "",
+                "end",
+                values=(
+                    label,
+                    f"{aggregates['avg_waiting']:.2f}",
+                    f"{aggregates['avg_turnaround']:.2f}",
+                    f"{aggregates['cpu_utilization'] * 100:.2f}",
+                    f"{aggregates['throughput']:.3f}",
+                ),
+            )
+            self._comparison_algorithm_for_item[item_id] = key
+
+    def _on_comparison_select(self, _event: tk.Event) -> None:
+        """
+        When a row in the comparison table is selected, rerun that algorithm
+        and update the main Gantt chart and metrics table accordingly.
+        """
+        selection = self.comparison_tree.selection()
+        if not selection:
+            return
+
+        item_id = selection[0]
+        algorithm = self._comparison_algorithm_for_item.get(item_id)
+        if not algorithm:
+            return
+
+        processes = self._get_processes_from_tree()
+        if not processes:
+            return
+
+        quantum: Optional[int] = None
+        if algorithm == "RR":
+            quantum_text = self.quantum_entry.get().strip()
+            if not quantum_text:
+                messagebox.showerror(
+                    "Invalid quantum",
+                    "Please enter a time quantum for Round Robin before comparing.",
+                )
+                return
+            try:
+                quantum = int(quantum_text)
+            except ValueError:
+                messagebox.showerror(
+                    "Invalid quantum", "Time quantum must be a positive integer."
+                )
+                return
+
+        try:
+            schedule, stats = self._run_algorithm(algorithm, processes, quantum)
+        except ValueError as exc:
+            messagebox.showerror("Error", str(exc))
+            return
+
+        aggregates = self._compute_aggregates(schedule, stats)
+
+        # Update the GUI with the new schedule and metrics.
+        self._populate_results_table(
+            stats, aggregates["avg_waiting"], aggregates["avg_turnaround"]
+        )
+        self._draw_gantt_chart(schedule)
+
+        if hasattr(self, "extra_metrics_label"):
+            self.extra_metrics_label.configure(
+                text=(
+                    f"CPU Utilization: {aggregates['cpu_utilization'] * 100:.2f}%  |  "
+                    f"Throughput: {aggregates['throughput']:.3f} proc/unit  |  "
+                    f"Min Waiting: {aggregates['min_waiting']:.2f}  |  "
+                    f"Max Waiting: {aggregates['max_waiting']:.2f}"
+                )
+            )
+
+        self._playback_time = 0
+        if hasattr(self, "playback_time_label"):
+            self.playback_time_label.configure(text="Time: t = 0")
 
     def _populate_results_table(
         self,
