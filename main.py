@@ -676,8 +676,8 @@ class CPUSchedulerApp:
         # Currently selected PID (for cross-highlighting).
         self._selected_pid: Optional[str] = None
 
-        # Last computed schedule (for highlighting, exporting, etc.).         self._current_schedule: List[ScheduleEntry] _code
-]
+        # Last computed schedule (for highlighting, exporting, etc.).
+        self._current_schedule: List[ScheduleEntry] = []
 
         # Mapping from comparison table rows to algorithm keys.
         self._comparison_algorithm_for_item: Dict[str, str] = {}
