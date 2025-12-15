@@ -676,11 +676,8 @@ class CPUSchedulerApp:
         # Currently selected PID (for cross-highlighting).
         self._selected_pid: Optional[str] = None
 
-        # Last computed schedule and playback state for the Gantt chart.
-        self._current_schedule: List[ScheduleEntry] = []
-        self._playback_time: Optional[int] = None
-        self._playback_running: bool = False
-        self._playback_job_id: Optional[int] = None
+        # Last computed schedule (for highlighting, exporting, etc.).         self._current_schedule: List[ScheduleEntry] _code
+]
 
         # Mapping from comparison table rows to algorithm keys.
         self._comparison_algorithm_for_item: Dict[str, str] = {}
@@ -1144,105 +1141,7 @@ class CPUSchedulerApp:
         )
         self.gantt_canvas.pack(fill="x", padx=12, pady=(0, 12))
 
-        # Playback controls for stepping through the schedule in time.
-        playback_frame = ctk.CTkFrame(gantt_frame, fg_color="transparent")
-        playback_frame.pack(fill="x", padx=12, pady=(0, 10))
-
-        def update_playback_time(new_time: int) -> None:
-            if not self._current_schedule:
-                return
-
-            total_time = max(entry["end"] for entry in self._current_schedule)
-            clamped = max(0, min(new_time, total_time))
-            self._playback_time = clamped
-            if hasattr(self, "playback_time_label"):
-                self.playback_time_label.configure(text=f"Time: t = {clamped}")
-            # Redraw the Gantt chart so the playback cursor moves visually.
-            if self._current_schedule:
-                self._draw_gantt_chart(self._current_schedule)
-
-        def playback_step_back() -> None:
-            if not self._current_schedule:
-                return
-            current = self._playback_time if self._playback_time is not None else 0
-            update_playback_time(current - 1)
-
-        def playback_step_forward() -> None:
-            if not self._current_schedule:
-                return
-            current = self._playback_time if self._playback_time is not None else 0
-            update_playback_time(current + 1)
-
-        def playback_pause() -> None:
-            self._playback_running = False
-            if self._playback_job_id is not None:
-                try:
-                    self.root.after_cancel(self._playback_job_id)
-                except tk.TclError:
-                    pass
-                self._playback_job_id = None
-
-        def playback_tick() -> None:
-            if not self._playback_running or not self._current_schedule:
-                return
-
-            current = self._playback_time if self._playback_time is not None else 0
-            total_time = max(entry["end"] for entry in self._current_schedule)
-            if current >= total_time:
-                # Stop at the end.
-                playback_pause()
-                return
-
-            update_playback_time(current + 1)
-            # Schedule next tick (~0.3s per step).
-            self._playback_job_id = self.root.after(300, playback_tick)
-
-        def playback_start() -> None:
-            if not self._current_schedule:
-                return
-            if self._playback_running:
-                return
-            self._playback_running = True
-            playback_tick()
-
-        step_back_btn = ctk.CTkButton(
-            playback_frame,
-            text="⏮ Step Back",
-            width=110,
-            command=playback_step_back,
-        )
-        step_back_btn.pack(side="left", padx=(0, 6))
-
-        step_forward_btn = ctk.CTkButton(
-            playback_frame,
-            text="⏭ Step Forward",
-            width=120,
-            command=playback_step_forward,
-        )
-        step_forward_btn.pack(side="left", padx=(0, 6))
-
-        play_btn = ctk.CTkButton(
-            playback_frame,
-            text="▶ Play",
-            width=80,
-            command=playback_start,
-        )
-        play_btn.pack(side="left", padx=(12, 6))
-
-        pause_btn = ctk.CTkButton(
-            playback_frame,
-            text="⏸ Pause",
-            width=90,
-            command=playback_pause,
-        )
-        pause_btn.pack(side="left", padx=(0, 6))
-
-        self.playback_time_label = ctk.CTkLabel(
-            playback_frame,
-            text="Time: t = -",
-            font=("Segoe UI", 11),
-        )
-        self.playback_time_label.pack(side="right")
+        
 
         # Process metrics section.
         metrics_frame = ctk.CTkFrame(frame, corner_radius=12)
@@ -1476,14 +1375,9 @@ class CPUSchedulerApp:
         # Reset PID counter so new processes start again at P1.
         self._next_pid = 1
 
-        # Clear selection-related and playback state.
+        # Clear selection-related state.
         self._selected_pid = None
         self._current_schedule = []
-        self._playback_time = None
-        self._playback_running = False
-        self._playback_job_id = None
-        if hasattr(self, "playback_time_label"):
-            self.playback_time_label.configure(text="Time: t = -")
 
         # Re-apply striping (no rows, but keeps things consistent if extended later).
         self._restyle_process_tree_rows()
@@ -1790,11 +1684,6 @@ class CPUSchedulerApp:
                 )
             )
 
-        # Initialize playback at time 0 and update label.
-        self._playback_time = 0
-        if hasattr(self, "playback_time_label"):
-            self.playback_time_label.configure(text="Time: t = 0")
-
     def run_comparison(self) -> None:
         """Run all algorithms on the current process set and populate the comparison table."""
         processes = self._get_processes_from_tree()
@@ -2087,28 +1976,7 @@ class CPUSchedulerApp:
             fill="#D1D5DB",
         )
 
-        # If a playback time is set, draw a vertical cursor line at that time
-        # so the playback controls have a clear visual effect.
-        if self._playback_time is not None:
-            t = self._playback_time
-            if 0 <= t <= total_time:
-                cursor_x = left_margin + t * time_scale
-                self.gantt_canvas.create_line(
-                    cursor_x,
-                    bar_top - 10,
-                    cursor_x,
-                    bar_bottom + 10,
-                    fill="#F97316",
-                    width=2,
-                )
-                self.gantt_canvas.create_text(
-                    cursor_x,
-                    bar_top - 12,
-                    text=f"t={t}",
-                    anchor="s",
-                    font=tick_font,
-                    fill="#FACC15",
-                )
+        
 
     # ------------------------------------------------------------------#
     # Mainloop                                                          #
