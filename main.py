@@ -663,11 +663,8 @@ class CPUSchedulerApp:
             "Priority Scheduling (preemptive)": "PRIORITY_PREEMPTIVE",
             "Round Robin (RR)": "RR",
         }
-        self._algorithm_label_var = ctk.StringVar(
-            value="First-Come, First-Served (FCFS)"
-        )
-
-        # Appearance mode (Dark / Light) for the UI.
+        self._algorithm_label_var = ctk.StringVar(             value="First-Come, First-Served (FCFS)"         )
+        # Appearance modece mode (Dark / Light) for the UI.
         self._appearance_var = ctk.StringVar(value="Dark")"
         )
 
