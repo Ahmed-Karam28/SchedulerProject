@@ -2108,11 +2108,7 @@ class CPUSchedulerApp:
                     anchor="s",
                     font=tick_font,
                     fill="#FACC15",
-                ),
-            anchor="n",
-            font=tick_font,
-            fill="#D1D5DB",
-        )
+                )
 
     # ------------------------------------------------------------------#
     # Mainloop                                                          #
