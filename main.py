@@ -1147,11 +1147,65 @@ class CPUSchedulerApp:
         playback_frame = ctk.CTkFrame(gantt_frame, fg_color="transparent")
         playback_frame.pack(fill="x", padx=12, pady=(0, 10))
 
+        def update_playback_time(new_time: int) -> None:
+            if not self._current_schedule:
+                return
+
+            total_time = max(entry["end"] for entry in self._current_schedule)
+            clamped = max(0, min(new_time, total_time))
+            self._playback_time = clamped
+            if hasattr(self, "playback_time_label"):
+                self.playback_time_label.configure(text=f"Time: t = {clamped}")
+
+        def playback_step_back() -> None:
+            if not self._current_schedule:
+                return
+            current = self._playback_time if self._playback_time is not None else 0
+            update_playback_time(current - 1)
+
+        def playback_step_forward() -> None:
+            if not self._current_schedule:
+                return
+            current = self._playback_time if self._playback_time is not None else 0
+            update_playback_time(current + 1)
+
+        def playback_pause() -> None:
+            self._playback_running = False
+            if self._playback_job_id is not None:
+                try:
+                    self.root.after_cancel(self._playback_job_id)
+                except tk.TclError:
+                    pass
+                self._playback_job_id = None
+
+        def playback_tick() -> None:
+            if not self._playback_running or not self._current_schedule:
+                return
+
+            current = self._playback_time if self._playback_time is not None else 0
+            total_time = max(entry["end"] for entry in self._current_schedule)
+            if current >= total_time:
+                # Stop at the end.
+                playback_pause()
+                return
+
+            update_playback_time(current + 1)
+            # Schedule next tick (~0.3s per step).
+            self._playback_job_id = self.root.after(300, playback_tick)
+
+        def playback_start() -> None:
+            if not self._current_schedule:
+                return
+            if self._playback_running:
+                return
+            self._playback_running = True
+            playback_tick()
+
         step_back_btn = ctk.CTkButton(
             playback_frame,
             text="⏮ Step Back",
             width=110,
-            command=self._playback_step_back,
+            command=playback_step_back,
         )
         step_back_btn.pack(side="left", padx=(0, 6))
 
@@ -1159,7 +1213,7 @@ class CPUSchedulerApp:
             playback_frame,
             text="⏭ Step Forward",
             width=120,
-            command=self._playback_step_forward,
+            command=playback_step_forward,
         )
         step_forward_btn.pack(side="left", padx=(0, 6))
 
@@ -1167,7 +1221,7 @@ class CPUSchedulerApp:
             playback_frame,
             text="▶ Play",
             width=80,
-            command=self._playback_start,
+            command=playback_start,
         )
         play_btn.pack(side="left", padx=(12, 6))
 
@@ -1175,7 +1229,7 @@ class CPUSchedulerApp:
             playback_frame,
             text="⏸ Pause",
             width=90,
-            command=self._playback_pause,
+            command=playback_pause,
         )
         pause_btn.pack(side="left", padx=(0, 6))
 
